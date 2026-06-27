@@ -124,7 +124,7 @@ async def finalize_followup(case_id: str) -> None:
     try:
         await get_repository().update_followup(
             case_id, context=answers, assessment=assessment, escalation=escalation,
-            report=report, transcript=transcript,
+            report=report, transcript=transcript, guardian_alerts=guardian_alerts,
         )
     except Exception as exc:  # pragma: no cover - persistence best-effort
         logger.warning("persisting follow-up for %s failed: %s", case_id, exc)

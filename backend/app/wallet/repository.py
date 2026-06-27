@@ -98,6 +98,7 @@ class WalletRepository(ABC):
     async def update_followup(
         self, case_id: str, *, context: list, assessment: dict | None,
         escalation: dict | None, report: str | None, transcript: list | None = None,
+        guardian_alerts: list | None = None,
     ) -> None: ...
 
     # admin aggregates
@@ -152,12 +153,15 @@ class InMemoryRepository(WalletRepository):
         # Balance + ledger already mutated on the live Account; just record the case.
         self._bank.cases[case.case_id] = case
 
-    async def update_followup(self, case_id, *, context, assessment, escalation, report, transcript=None) -> None:
+    async def update_followup(self, case_id, *, context, assessment, escalation, report, transcript=None, guardian_alerts=None) -> None:
         # Follow-up lives in the registry bucket for the live poll; also fold the call
-        # transcript into the stored case so the control centre's case detail shows it.
+        # transcript + guardian alerts into the stored case so the control centre shows them.
         case = self._bank.cases.get(case_id)
-        if case is not None and transcript:
-            case.transcript = transcript
+        if case is not None:
+            if transcript:
+                case.transcript = transcript
+            if guardian_alerts:
+                case.guardian_alerts = guardian_alerts
         return None
 
     async def load_bank(self) -> Bank:
@@ -325,17 +329,28 @@ class SupabaseRepository(WalletRepository):
 
         await asyncio.to_thread(_w)
 
-    async def update_followup(self, case_id, *, context, assessment, escalation, report, transcript=None) -> None:
-        patch = {
+    async def update_followup(self, case_id, *, context, assessment, escalation, report, transcript=None, guardian_alerts=None) -> None:
+        # Core columns that exist in the base schema — the control centre renders these,
+        # so they must persist even if the optional follow-up columns weren't migrated.
+        core: dict = {}
+        if transcript:
+            core["transcript"] = transcript
+        if guardian_alerts:
+            core["guardian_alerts"] = guardian_alerts
+        # Richer follow-up columns (require the ALTER migration); best-effort.
+        extra = {
             "context": context, "assessment": assessment,
             "escalation": escalation, "report": report,
         }
-        # Persist the call transcript so the control centre's case detail renders it.
-        if transcript:
-            patch["transcript"] = transcript
 
         def _w():
-            self._connect().table("cases").update(patch).eq("case_id", case_id).execute()
+            c = self._connect()
+            if core:
+                c.table("cases").update(core).eq("case_id", case_id).execute()
+            try:
+                c.table("cases").update(extra).eq("case_id", case_id).execute()
+            except Exception as exc:  # follow-up columns not migrated yet
+                logger.warning("follow-up columns not persisted for %s (run the ALTER): %s", case_id, exc)
 
         await asyncio.to_thread(_w)
 
