@@ -315,7 +315,7 @@ export default function Landing() {
 
       {/* Live interception feed, with the victim mid-scam bleeding in from the left edge */}
       <div className="feed-wrap relative">
-        <div className="pointer-events-none absolute left-[calc(50%_-_50vw_+_36px)] top-1/2 -z-10 hidden -mt-[72px] -translate-y-1/2 select-none xl:block">
+        <div className="pointer-events-none absolute left-[calc(50%_-_50vw_+_8px)] top-1/2 -z-10 hidden -mt-[72px] -translate-y-1/2 select-none xl:block">
           <img
             src="/decor/victim-call.png"
             alt=""
@@ -323,8 +323,8 @@ export default function Landing() {
             loading="lazy"
             className="decor-call w-[30vw] max-w-[380px]"
             style={{
-              maskImage: "radial-gradient(130% 130% at 26% 50%, #000 34%, transparent 72%)",
-              WebkitMaskImage: "radial-gradient(130% 130% at 26% 50%, #000 34%, transparent 72%)",
+              maskImage: "radial-gradient(118% 118% at 23% 50%, #000 26%, transparent 56%)",
+              WebkitMaskImage: "radial-gradient(118% 118% at 23% 50%, #000 26%, transparent 56%)",
             }}
           />
         </div>
