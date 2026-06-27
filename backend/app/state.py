@@ -38,3 +38,6 @@ class SwarmState(TypedDict, total=False):
 
     turn_count: int
     narrative: str
+    # True once a live interactive call is placed: the conversation + reasoning happen
+    # out-of-band over webhooks, so the graph skips the simulated negotiation loop.
+    awaiting_live: bool

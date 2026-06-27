@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
     twilio_phone_number: str | None = None
+    # When set, every intervention call is routed to this number instead of the
+    # customer's profile phone — used for demos so the call reaches a real, verified
+    # handset. Keep it in .env (not committed) rather than hard-coded in source.
+    intervention_call_number: str | None = None
     elevenlabs_api_key: str | None = None
     elevenlabs_voice_id: str = "21m00Tcm4TlvDq8ikWAM"
 
@@ -73,6 +77,10 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     supabase_service_key: str | None = None
     redis_url: str | None = None
+
+    # Public HTTPS base (e.g. an ngrok URL) that Twilio can reach for interactive
+    # voice webhooks. When unset, the call degrades to the single-line spoken warning.
+    public_base_url: str | None = None
 
     # ── Overrides ──────────────────────────────────────────────────────────────
     # Force the deterministic simulation path even when credentials are present —

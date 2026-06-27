@@ -94,6 +94,12 @@ class WalletRepository(ABC):
         self, user_id: str, account: Account, entry: LedgerEntry, case: CaseRecord
     ) -> None: ...
 
+    @abstractmethod
+    async def update_followup(
+        self, case_id: str, *, context: list, assessment: dict | None,
+        escalation: dict | None, report: str | None,
+    ) -> None: ...
+
     # admin aggregates
     @abstractmethod
     async def load_bank(self) -> Bank: ...
@@ -145,6 +151,11 @@ class InMemoryRepository(WalletRepository):
     async def commit_transfer(self, user_id, account, entry, case) -> None:
         # Balance + ledger already mutated on the live Account; just record the case.
         self._bank.cases[case.case_id] = case
+
+    async def update_followup(self, case_id, *, context, assessment, escalation, report) -> None:
+        # Follow-up lives in the registry bucket for the live poll; nothing extra to
+        # persist in in-memory mode.
+        return None
 
     async def load_bank(self) -> Bank:
         return self._bank
@@ -308,6 +319,17 @@ class SupabaseRepository(WalletRepository):
             c.table("users").update({"balance": round(account.balance, 2)}).eq("id", user_id).execute()
             c.table("transactions").upsert(txn_row).execute()
             c.table("cases").upsert(case_row).execute()
+
+        await asyncio.to_thread(_w)
+
+    async def update_followup(self, case_id, *, context, assessment, escalation, report) -> None:
+        patch = {
+            "context": context, "assessment": assessment,
+            "escalation": escalation, "report": report,
+        }
+
+        def _w():
+            self._connect().table("cases").update(patch).eq("case_id", case_id).execute()
 
         await asyncio.to_thread(_w)
 

@@ -69,7 +69,11 @@ class SwarmOrchestrator:
             self._route_after_twin,
             {"intervene": "negotiator", "settle": "arbiter", "recover": "recovery"},
         )
-        g.add_edge("negotiator", "educator")
+        g.add_conditional_edges(
+            "negotiator",
+            self._route_after_negotiator,
+            {"await_live": "arbiter", "educate": "educator"},
+        )
         g.add_conditional_edges(
             "educator",
             self._route_after_educator,
@@ -89,6 +93,12 @@ class SwarmOrchestrator:
         if state["risk"].score < self.rt.settings.intervention_threshold:
             return "settle"
         return "intervene"
+
+    def _route_after_negotiator(self, state: SwarmState) -> str:
+        # A live interactive call was placed — skip the simulated educator/guardian loop
+        # and let the arbiter block on signals; the conversation, LLM reasoning and
+        # escalation run out-of-band over the voice webhooks.
+        return "await_live" if state.get("awaiting_live") else "educate"
 
     def _route_after_educator(self, state: SwarmState) -> str:
         classification = state.get("classification")

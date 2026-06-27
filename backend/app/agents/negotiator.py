@@ -31,13 +31,31 @@ class VoiceNegotiator(Agent):
         new_turns: list[TranscriptTurn] = []
         cursor = len(transcript)
 
+        # Interactive live call: place it and hand off. The speech interview + the
+        # customer's real answers arrive over Twilio webhooks, and the LLM reasoning +
+        # escalation run as a follow-up — so we don't drive a simulated conversation.
+        if turn == 0 and self.rt.voice.interactive_enabled:
+            session = await self.rt.voice.initiate(customer.phone, "", case_id=case_id)
+            await self.emit(
+                case_id,
+                EventType.call_started,
+                payload={
+                    "call_sid": session.sid,
+                    "live": session.live,
+                    "interactive": session.interactive,
+                    "to": session.to_number,
+                },
+            )
+            await self.emit(case_id, EventType.agent_completed)
+            return {"awaiting_live": True, "turn_count": 1}
+
         if turn == 0:
             opening = await self.rt.negotiator.opening(customer, txn, risk)
             session = await self.rt.voice.initiate(customer.phone, opening)
             await self.emit(
                 case_id,
                 EventType.call_started,
-                payload={"call_sid": session.sid, "live": session.live, "to": customer.phone},
+                payload={"call_sid": session.sid, "live": session.live, "to": session.to_number},
             )
             cursor = await self._add(case_id, new_turns, cursor, Speaker.agent, opening)
         else:

@@ -30,7 +30,13 @@ class InterventionRegistry:
     def _bucket(self, case_id: str) -> dict:
         bucket = self._cases.get(case_id)
         if bucket is None:
-            bucket = {"events": [], "outcome": None, "done": False}
+            bucket = {
+                "events": [], "outcome": None, "done": False,
+                # case context captured from the event stream, for the voice follow-up
+                "customer": None, "transaction": None, "risk": None, "classification": None,
+                # voice follow-up results
+                "context": [], "assessment": None, "escalation": None, "report": None,
+            }
             self._cases[case_id] = bucket
             self._order.append(case_id)
             # evict oldest to bound memory
@@ -41,13 +47,35 @@ class InterventionRegistry:
     def record(self, event: SwarmEvent) -> None:
         bucket = self._bucket(event.case_id)
         bucket["events"].append(event.envelope())
-        if event.type == EventType.case_closed:
+        p = event.payload or {}
+        if event.type == EventType.case_opened:
+            bucket["customer"] = p.get("customer")
+            bucket["transaction"] = p.get("transaction")
+        elif event.type == EventType.risk_scored:
+            bucket["risk"] = p.get("risk")
+        elif event.type == EventType.scam_classified:
+            bucket["classification"] = p.get("classification")
+        elif event.type == EventType.case_closed:
             bucket["done"] = True
 
     def set_outcome(self, case_id: str, outcome: InterventionOutcome) -> None:
         bucket = self._bucket(case_id)
         bucket["outcome"] = outcome.model_dump(mode="json")
         bucket["done"] = True
+
+    # ── Voice follow-up state ────────────────────────────────────────────────────
+    def add_answer(self, case_id: str, question: str, answer: str) -> None:
+        self._bucket(case_id)["context"].append({"question": question, "answer": answer})
+
+    def set_followup(self, case_id: str, *, assessment: dict | None = None,
+                     escalation: dict | None = None, report: str | None = None) -> None:
+        bucket = self._bucket(case_id)
+        if assessment is not None:
+            bucket["assessment"] = assessment
+        if escalation is not None:
+            bucket["escalation"] = escalation
+        if report is not None:
+            bucket["report"] = report
 
     def get(self, case_id: str) -> dict | None:
         return self._cases.get(case_id)

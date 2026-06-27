@@ -26,6 +26,10 @@ class EventType(str, Enum):
     guardian_alerted = "guardian.alerted"
     decision_made = "decision.made"
     evidence_built = "evidence.built"
+    # Voice follow-up: the LLM's reasoning over the victim's real answers, and the
+    # filed incident report.
+    assessment_ready = "assessment.ready"
+    report_filed = "report.filed"
     case_closed = "case.closed"
 
 

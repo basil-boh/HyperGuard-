@@ -87,6 +87,18 @@ create table if not exists cases (
   guardian_alerts jsonb not null default '[]',
   transcript      jsonb not null default '[]',
   evidence        jsonb,
-  narrative       text
+  narrative       text,
+  -- Voice follow-up: the victim's spoken answers, the LLM's assessment, escalation
+  -- record, and the generated incident report.
+  context         jsonb,
+  assessment      jsonb,
+  escalation      jsonb,
+  report          text
 );
 create index if not exists cases_user_created_idx on cases(user_id, created_at desc);
+
+-- ── Migration for an EXISTING cases table (run once if you created it earlier) ──
+alter table cases add column if not exists context    jsonb;
+alter table cases add column if not exists assessment jsonb;
+alter table cases add column if not exists escalation jsonb;
+alter table cases add column if not exists report     text;

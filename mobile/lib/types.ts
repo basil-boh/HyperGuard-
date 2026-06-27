@@ -67,10 +67,36 @@ export interface SwarmEvent {
   payload: Record<string, any>;
 }
 
+export interface ContextQA {
+  question: string;
+  answer: string;
+}
+
+export interface Assessment {
+  scam_likelihood: number;
+  is_scam: boolean;
+  reasoning: string;
+  recommended_action: "clear" | "monitor" | "escalate" | string;
+  escalation_reasons: string[];
+}
+
+export interface Escalation {
+  escalated: boolean;
+  guardians_notified: number;
+  guardian_alerts: any[];
+  filed_with_authorities: boolean;
+  reasons: string[];
+}
+
 export interface InterventionPoll {
   case_id: string;
   events: SwarmEvent[];
   outcome: any | null;
   done: boolean;
+  followup_pending: boolean;
   balance: number;
+  context: ContextQA[];
+  assessment: Assessment | null;
+  escalation: Escalation | null;
+  report: string | null;
 }

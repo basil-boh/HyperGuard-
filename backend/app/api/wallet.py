@@ -181,10 +181,23 @@ async def intervention(
     bucket = get_registry().get(case_id)
     if bucket is None:
         raise HTTPException(status_code=404, detail="unknown case")
+    # A live interactive call runs its interview + LLM follow-up *after* the graph closes
+    # the case, so the client must keep polling until the assessment lands.
+    had_interactive = any(
+        e.get("type") == "call.started" and (e.get("payload") or {}).get("interactive")
+        for e in bucket["events"]
+    )
+    followup_pending = had_interactive and bucket.get("assessment") is None
     return {
         "case_id": case_id,
         "events": bucket["events"],
         "outcome": bucket["outcome"],
         "done": bucket["done"],
+        "followup_pending": followup_pending,
         "balance": round(acc.balance, 2),
+        # Voice follow-up (populated after an interactive call).
+        "context": bucket.get("context") or [],
+        "assessment": bucket.get("assessment"),
+        "escalation": bucket.get("escalation"),
+        "report": bucket.get("report"),
     }

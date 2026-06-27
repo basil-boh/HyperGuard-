@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { POLL_INTERVAL_MS } from "./config";
-import type { AgentKey, Decision, InterventionPoll, SwarmEvent } from "./types";
+import type {
+  AgentKey,
+  Assessment,
+  ContextQA,
+  Decision,
+  Escalation,
+  InterventionPoll,
+  SwarmEvent,
+} from "./types";
 
 export type AgentState = "idle" | "engaged" | "done";
 
@@ -25,6 +33,12 @@ export interface InterventionView {
   hasEvidence: boolean;
   done: boolean;
   balance: number | null;
+  // Voice follow-up
+  followupPending: boolean;
+  context: ContextQA[];
+  assessment: Assessment | null;
+  escalation: Escalation | null;
+  report: string | null;
 }
 
 const AGENTS: AgentKey[] = [
@@ -49,6 +63,11 @@ function blank(): InterventionView {
     hasEvidence: false,
     done: false,
     balance: null,
+    followupPending: false,
+    context: [],
+    assessment: null,
+    escalation: null,
+    report: null,
   };
 }
 
@@ -56,6 +75,11 @@ function reduce(poll: InterventionPoll): InterventionView {
   const v = blank();
   v.done = poll.done;
   v.balance = poll.balance;
+  v.followupPending = !!poll.followup_pending;
+  v.context = poll.context ?? [];
+  v.assessment = poll.assessment ?? null;
+  v.escalation = poll.escalation ?? null;
+  v.report = poll.report ?? null;
 
   for (const ev of poll.events as SwarmEvent[]) {
     const agent = ev.agent;
@@ -117,9 +141,14 @@ function reduce(poll: InterventionPoll): InterventionView {
   return v;
 }
 
+// Keep polling for the voice follow-up after the graph closes, but bound it so an
+// unanswered call can't poll forever (~4 min at the configured interval).
+const MAX_FOLLOWUP_POLLS = 360;
+
 export function useIntervention(caseId: string): InterventionView {
   const [view, setView] = useState<InterventionView>(blank);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const followupPolls = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -129,7 +158,9 @@ export function useIntervention(caseId: string): InterventionView {
         const poll = await api.intervention(caseId);
         if (!active) return;
         setView(reduce(poll));
-        if (!poll.done) timer.current = setTimeout(tick, POLL_INTERVAL_MS);
+        const awaitingFollowup = poll.followup_pending && followupPolls.current < MAX_FOLLOWUP_POLLS;
+        if (poll.followup_pending) followupPolls.current += 1;
+        if (!poll.done || awaitingFollowup) timer.current = setTimeout(tick, POLL_INTERVAL_MS);
       } catch {
         if (active) timer.current = setTimeout(tick, POLL_INTERVAL_MS * 2);
       }

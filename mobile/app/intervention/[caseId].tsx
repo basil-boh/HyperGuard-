@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -15,6 +15,12 @@ const VERDICT = {
   block: { label: "Transfer blocked", tint: color.crimson, icon: "shield" as const, sub: "Your money stayed in your account" },
   hold: { label: "Held for review", tint: color.amber, icon: "pause" as const, sub: "Pending your confirmation" },
   approve: { label: "Transfer approved", tint: color.signal, icon: "checkmark-circle" as const, sub: "Sent securely" },
+};
+
+const ACTION_META: Record<string, { label: string; tint: string }> = {
+  escalate: { label: "Likely scam — escalated", tint: color.crimson },
+  monitor: { label: "Monitoring", tint: color.amber },
+  clear: { label: "Looks legitimate", tint: color.signal },
 };
 
 export default function Intervention() {
@@ -109,6 +115,77 @@ export default function Intervention() {
           </>
         )}
 
+        {/* Voice follow-up: what the customer told us */}
+        {v.context.length > 0 && (
+          <>
+            <Text style={styles.section}>What you told us</Text>
+            <Card>
+              {v.context.map((c, i) => (
+                <View key={i} style={i > 0 ? styles.qaBorder : undefined}>
+                  <Text style={styles.qaQ}>{c.question}</Text>
+                  <Text style={styles.qaA}>“{c.answer}”</Text>
+                </View>
+              ))}
+            </Card>
+          </>
+        )}
+
+        {/* Follow-up in progress */}
+        {v.followupPending && !v.assessment && (
+          <Card style={styles.pendingCard}>
+            <ActivityIndicator color={color.signal} />
+            <Text style={styles.pendingText}>On a call with you — gathering context and reasoning about this transfer…</Text>
+          </Card>
+        )}
+
+        {/* AI assessment */}
+        {v.assessment && (
+          <>
+            <Text style={styles.section}>AI assessment</Text>
+            <Card style={v.assessment.recommended_action === "escalate" ? { borderColor: color.crimson + "55" } : undefined}>
+              <View style={styles.assessHead}>
+                <Text style={[styles.assessAction, { color: (ACTION_META[v.assessment.recommended_action] ?? ACTION_META.monitor).tint }]}>
+                  {(ACTION_META[v.assessment.recommended_action] ?? ACTION_META.monitor).label}
+                </Text>
+                <Text style={styles.assessConf}>{pct(v.assessment.scam_likelihood)}</Text>
+              </View>
+              <Text style={styles.assessReason}>{v.assessment.reasoning}</Text>
+              {v.assessment.escalation_reasons?.length > 0 && (
+                <View style={styles.tags}>
+                  {v.assessment.escalation_reasons.map((r) => (
+                    <View key={r} style={styles.tag}><Text style={styles.tagText}>{r}</Text></View>
+                  ))}
+                </View>
+              )}
+            </Card>
+          </>
+        )}
+
+        {/* Escalation + incident report */}
+        {v.escalation?.escalated && (
+          <>
+            <Text style={styles.section}>Escalation</Text>
+            <Card>
+              <View style={styles.escRow}>
+                <Ionicons name="people" size={16} color={color.ice} />
+                <Text style={styles.escText}>
+                  {v.escalation.guardians_notified} guardian{v.escalation.guardians_notified === 1 ? "" : "s"} alerted by SMS
+                </Text>
+              </View>
+              <View style={[styles.escRow, { marginTop: 10 }]}>
+                <Ionicons name="document-text" size={16} color={color.signal} />
+                <Text style={styles.escText}>Incident report filed with authorities</Text>
+              </View>
+            </Card>
+            {v.report && (
+              <>
+                <Text style={styles.section}>Incident report</Text>
+                <Card><Text style={styles.reportText}>{v.report}</Text></Card>
+              </>
+            )}
+          </>
+        )}
+
         {/* Verdict */}
         {v.done && v.decision && (
           <View style={styles.verdictWrap}>
@@ -191,6 +268,18 @@ const styles = StyleSheet.create({
   guardianMeta: { color: color.faint, fontSize: 12.5, marginTop: 2, textTransform: "capitalize" },
   ackTag: { borderRadius: radius.pill, backgroundColor: color.signalSoft, paddingHorizontal: 9, paddingVertical: 4 },
   ackText: { color: color.signal, fontSize: 10.5, fontWeight: font.bold, textTransform: "uppercase" },
+  qaBorder: { borderTopWidth: 1, borderTopColor: color.hairline, marginTop: 12, paddingTop: 12 },
+  qaQ: { color: color.faint, fontSize: 12.5, lineHeight: 18 },
+  qaA: { color: color.ink, fontSize: 14.5, lineHeight: 20, marginTop: 4, fontStyle: "italic" },
+  pendingCard: { marginTop: 18, flexDirection: "row", alignItems: "center", gap: 12 },
+  pendingText: { color: color.muted, fontSize: 13, lineHeight: 19, flex: 1 },
+  assessHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  assessAction: { fontSize: 15.5, fontWeight: font.bold },
+  assessConf: { color: color.muted, fontSize: 18, fontWeight: font.black, fontVariant: ["tabular-nums"] },
+  assessReason: { color: color.ink, fontSize: 13.5, lineHeight: 20 },
+  escRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  escText: { color: color.ink, fontSize: 14, flex: 1 },
+  reportText: { color: color.muted, fontSize: 12.5, lineHeight: 19, fontVariant: ["tabular-nums"] },
   verdictWrap: { marginTop: 26 },
   verdict: { borderRadius: radius.lg, borderWidth: 1, padding: 24, alignItems: "center" },
   verdictIcon: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, alignItems: "center", justifyContent: "center", marginBottom: 14 },

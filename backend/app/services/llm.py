@@ -41,6 +41,22 @@ class LLMClient:
                 return None
         return self._client
 
+    async def _create(self, client, **kwargs):
+        """Call chat.completions, retrying once without params a newer model rejects
+        (e.g. gpt-5.x rejects a custom `temperature` / `max_tokens`)."""
+        try:
+            return await client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            msg = str(exc).lower()
+            stripped = False
+            for param in ("temperature", "max_tokens"):
+                if param in msg and param in kwargs:
+                    kwargs.pop(param, None)
+                    stripped = True
+            if not stripped:
+                raise
+            return await client.chat.completions.create(**kwargs)
+
     async def complete_json(
         self, system: str, user: str, *, temperature: float | None = None
     ) -> dict | None:
@@ -48,7 +64,8 @@ class LLMClient:
         if client is None:
             return None
         try:
-            resp = await client.chat.completions.create(
+            resp = await self._create(
+                client,
                 model=self._settings.llm_model,
                 temperature=temperature
                 if temperature is not None
@@ -71,7 +88,8 @@ class LLMClient:
         if client is None:
             return None
         try:
-            resp = await client.chat.completions.create(
+            resp = await self._create(
+                client,
                 model=self._settings.llm_model,
                 temperature=temperature
                 if temperature is not None

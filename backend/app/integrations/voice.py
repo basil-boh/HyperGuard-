@@ -23,6 +23,7 @@ class CallSession:
     sid: str
     to_number: str
     live: bool
+    interactive: bool = False
 
 
 class VoiceGateway:
@@ -33,6 +34,12 @@ class VoiceGateway:
     @property
     def is_live(self) -> bool:
         return self._settings.telephony_enabled
+
+    @property
+    def interactive_enabled(self) -> bool:
+        """True when we can run a two-way speech interview: live telephony AND a public
+        URL Twilio can post webhooks back to."""
+        return self._settings.telephony_enabled and bool(self._settings.public_base_url)
 
     def _client(self):
         if not self.is_live:
@@ -49,26 +56,43 @@ class VoiceGateway:
                 return None
         return self._twilio
 
-    async def initiate(self, to_number: str, opening_line: str) -> CallSession:
+    async def initiate(
+        self, to_number: str, opening_line: str, case_id: str | None = None
+    ) -> CallSession:
+        # A configured demo number overrides the (often fake) profile phone so the
+        # call reaches a real, verified handset.
+        target = self._settings.intervention_call_number or to_number
         client = self._client()
         if client is None:
-            logger.info("[demo-voice] would call %s: %r", to_number, opening_line)
-            return CallSession(sid=f"demo-{uuid4().hex[:12]}", to_number=to_number, live=False)
-        try:
-            from twilio.twiml.voice_response import VoiceResponse
+            logger.info("[demo-voice] would call %s: %r", target, opening_line)
+            return CallSession(sid=f"demo-{uuid4().hex[:12]}", to_number=target, live=False)
 
-            twiml = VoiceResponse()
-            twiml.say(opening_line, voice="Polly.Joanna")
-            twiml.pause(length=1)
-            call = client.calls.create(
-                to=to_number,
-                from_=self._settings.twilio_phone_number,
-                twiml=str(twiml),
+        interactive = self.interactive_enabled and bool(case_id)
+        try:
+            kwargs: dict = {"to": target, "from_": self._settings.twilio_phone_number}
+            if interactive:
+                # Twilio fetches TwiML from our public webhook, which runs the speech
+                # interview and posts each answer back.
+                base = self._settings.public_base_url.rstrip("/")
+                kwargs["url"] = f"{base}/twilio/voice/start?case_id={case_id}"
+                kwargs["method"] = "POST"
+            else:
+                from twilio.twiml.voice_response import VoiceResponse
+
+                twiml = VoiceResponse()
+                twiml.say(opening_line, voice="Polly.Joanna")
+                twiml.pause(length=1)
+                kwargs["twiml"] = str(twiml)
+
+            call = client.calls.create(**kwargs)
+            logger.info(
+                "Outbound intervention call placed to %s (sid=%s, interactive=%s)",
+                target, call.sid, interactive,
             )
-            return CallSession(sid=call.sid, to_number=to_number, live=True)
+            return CallSession(sid=call.sid, to_number=target, live=True, interactive=interactive)
         except Exception as exc:  # pragma: no cover - network
-            logger.warning("Outbound call failed, degrading to demo: %s", exc)
-            return CallSession(sid=f"demo-{uuid4().hex[:12]}", to_number=to_number, live=False)
+            logger.warning("Outbound call to %s failed, degrading to demo: %s", target, exc)
+            return CallSession(sid=f"demo-{uuid4().hex[:12]}", to_number=target, live=False)
 
     async def synthesize(self, text: str) -> bytes | None:
         """Render a line with ElevenLabs; returns audio bytes or None when unavailable."""

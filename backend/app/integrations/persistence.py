@@ -55,6 +55,7 @@ class SupabaseStore:
             "case_id": case_id,
             "user_id": customer.id,
             "user_name": customer.name,
+            "created_at": outcome.decided_at.isoformat(),
             "transaction": txn,
             "decision": outcome.decision.value,
             "status": "approved" if outcome.decision == Decision.approve else "blocked",
