@@ -113,6 +113,54 @@ export default function CasePage() {
                 <p className="mt-3 border-l-2 border-signal bg-signal/5 px-3 py-2 text-[0.8rem] leading-relaxed text-ink">
                   {c.classification.guidance}
                 </p>
+
+                {/* Educator debrief: what they said, how the scam works, how to avoid it */}
+                {(c.classification.mentions?.length ||
+                  c.classification.how_it_works ||
+                  c.classification.prevention?.length) && (
+                  <div className="mt-4 border-t border-hairline pt-4">
+                    <span className="readout text-ice">educator debrief</span>
+
+                    {!!c.classification.mentions?.length && (
+                      <div className="mt-2.5">
+                        <p className="readout">what they told us</p>
+                        <ul className="mt-1.5 space-y-1.5">
+                          {c.classification.mentions.map((m) => (
+                            <li
+                              key={m}
+                              className="border-l-2 border-crimson/50 pl-2.5 text-[0.78rem] italic leading-relaxed text-muted"
+                            >
+                              “{m}”
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {c.classification.how_it_works && (
+                      <div className="mt-3.5">
+                        <p className="readout">how this scam works</p>
+                        <p className="mt-1.5 text-[0.8rem] leading-relaxed text-ink">
+                          {c.classification.how_it_works}
+                        </p>
+                      </div>
+                    )}
+
+                    {!!c.classification.prevention?.length && (
+                      <div className="mt-3.5">
+                        <p className="readout text-signal">how to stay safe next time</p>
+                        <ul className="mt-2 space-y-1.5">
+                          {c.classification.prevention.map((p) => (
+                            <li key={p} className="flex gap-2 text-[0.8rem] leading-relaxed text-ink">
+                              <span className="mt-[0.1rem] shrink-0 text-signal">✓</span>
+                              <span>{p}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </section>
           )}

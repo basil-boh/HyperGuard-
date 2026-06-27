@@ -25,6 +25,10 @@ export function ClassificationCard({ c }: { c: ScamClassification | null }) {
     );
   }
 
+  const mentions = c.mentions ?? [];
+  const prevention = c.prevention ?? [];
+  const hasDebrief = mentions.length > 0 || !!c.how_it_works || prevention.length > 0;
+
   return (
     <div className="animate-rise">
       <div className="flex items-start justify-between gap-3">
@@ -55,6 +59,52 @@ export function ClassificationCard({ c }: { c: ScamClassification | null }) {
         <span className="readout text-signal">guidance delivered</span>
         <p className="mt-1 text-[0.8rem] leading-relaxed text-ink">{c.guidance}</p>
       </div>
+
+      {/* ── Educator debrief ────────────────────────────────────────────────────
+          References what the customer actually said, explains how the scam works,
+          and arms them against it next time. */}
+      {hasDebrief && (
+        <div className="mt-4 border-t border-hairline pt-4">
+          <span className="readout text-ice">educator debrief</span>
+
+          {mentions.length > 0 && (
+            <div className="mt-2.5">
+              <p className="readout">what you told us</p>
+              <ul className="mt-1.5 space-y-1.5">
+                {mentions.map((m) => (
+                  <li
+                    key={m}
+                    className="border-l-2 border-crimson/50 pl-2.5 text-[0.78rem] italic leading-relaxed text-muted"
+                  >
+                    “{m}”
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {c.how_it_works && (
+            <div className="mt-3.5">
+              <p className="readout">how this scam works</p>
+              <p className="mt-1.5 text-[0.8rem] leading-relaxed text-ink">{c.how_it_works}</p>
+            </div>
+          )}
+
+          {prevention.length > 0 && (
+            <div className="mt-3.5">
+              <p className="readout text-signal">how to stay safe next time</p>
+              <ul className="mt-2 space-y-1.5">
+                {prevention.map((p) => (
+                  <li key={p} className="flex gap-2 text-[0.8rem] leading-relaxed text-ink">
+                    <span className="mt-[0.1rem] shrink-0 text-signal">✓</span>
+                    <span>{p}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

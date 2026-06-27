@@ -43,6 +43,10 @@ export interface ScamClassification {
   confidence: number;
   indicators: string[];
   guidance: string;
+  // Educator debrief — the customer's own phrases, how the scam works, and how to avoid it.
+  mentions?: string[];
+  how_it_works?: string;
+  prevention?: string[];
 }
 
 export interface TrustedContact {

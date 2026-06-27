@@ -151,6 +151,19 @@ export default function Landing() {
 
       // ── Stats reveal + count-up ──────────────────────────────────────────────
       gsap.from(".stat", { scrollTrigger: { trigger: ".stats", start: "top 82%" }, y: 26, opacity: 0, duration: 0.7, stagger: 0.12, ease: "power3.out" });
+
+      // Decorative victim photos fade in/out tied to scroll position (scrubbed), so
+      // they appear gradually on the way down and vanish one-by-one on the way back up.
+      gsap.fromTo(
+        ".decor-call",
+        { opacity: 0, y: 40 },
+        { opacity: 1, y: 0, ease: "none", scrollTrigger: { trigger: ".feed-wrap", start: "top 88%", end: "top 50%", scrub: true } },
+      );
+      gsap.fromTo(
+        ".decor-shock",
+        { opacity: 0, y: 40 },
+        { opacity: 1, y: 0, ease: "none", scrollTrigger: { trigger: ".scale", start: "top 88%", end: "top 50%", scrub: true } },
+      );
       // One shared tween drives every metric off the same progress value, so all
       // four start and land on the same frame regardless of magnitude (5, 24/7,
       // 94 all finish together). Linear ease keeps each one ticking up to the end.
@@ -300,11 +313,34 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Live interception feed */}
-      <InterceptionFeed />
+      {/* Live interception feed, with the victim mid-scam bleeding in from the left edge */}
+      <div className="feed-wrap relative">
+        <div className="pointer-events-none absolute left-[calc(50%_-_50vw_+_36px)] top-1/2 -z-10 hidden -mt-[72px] -translate-y-1/2 select-none xl:block">
+          <img
+            src="/decor/victim-call.png"
+            alt=""
+            aria-hidden
+            loading="lazy"
+            className="decor-call w-[30vw] max-w-[380px]"
+            style={{
+              maskImage: "radial-gradient(130% 130% at 26% 50%, #000 34%, transparent 72%)",
+              WebkitMaskImage: "radial-gradient(130% 130% at 26% 50%, #000 34%, transparent 72%)",
+            }}
+          />
+        </div>
+        <InterceptionFeed />
+      </div>
 
       {/* Scale argument, why it has to be agentic */}
       <section className="scale relative z-10 mx-auto max-w-5xl px-6 py-20">
+        {/* Decorative: the moment of realisation, bleeding in from the right edge */}
+        <img
+          src="/decor/victim-shock.png"
+          alt=""
+          aria-hidden
+          loading="lazy"
+          className="decor-shock pointer-events-none absolute -bottom-16 right-[calc(50%_-_50vw)] -z-10 hidden w-[28vw] max-w-[380px] select-none xl:block"
+        />
         <p className="scale-reveal readout text-signal">Why it has to be agentic</p>
         <p className="scale-reveal mt-5 font-display text-2xl font-medium leading-snug tracking-tight text-ink sm:text-[2rem]">
           A bank clears <span className="text-signal">millions of transfers a day</span> with only a

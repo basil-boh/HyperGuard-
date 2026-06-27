@@ -140,6 +140,10 @@ class ScamClassification(BaseModel):
     confidence: float
     indicators: list[str]
     guidance: str  # what the negotiator should say back to the customer
+    # ── Educator debrief: shown to the customer after the call ──────────────────
+    mentions: list[str] = Field(default_factory=list)  # the customer's own phrases that matched
+    how_it_works: str = ""  # plain-language explanation of this scam's mechanics
+    prevention: list[str] = Field(default_factory=list)  # how to avoid it next time
 
 
 # ── Guardian ───────────────────────────────────────────────────────────────────

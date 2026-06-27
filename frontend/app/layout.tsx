@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { AmongUsClickBurst } from "@/components/fun/AmongUsClickBurst";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="font-sans antialiased">
         <div className="grid-field" aria-hidden />
         <div className="relative z-10">{children}</div>
+        <AmongUsClickBurst />
       </body>
     </html>
   );

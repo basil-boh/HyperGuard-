@@ -1,5 +1,7 @@
 // Control-centre API client (the bank's view over the protection layer).
 
+import type { ScamClassification } from "@/lib/types";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 async function get<T>(path: string): Promise<T> {
@@ -107,7 +109,7 @@ export interface CaseDetail extends CaseSummary {
   transaction: Record<string, any>;
   risk_signals: { code: string; label: string; contribution: number; severity: string; detail: string }[];
   rationale: string;
-  classification: { archetype: string; title: string; confidence: number; indicators: string[]; guidance: string } | null;
+  classification: ScamClassification | null;
   guardian_alerts: { contact: Guardian; channel: string; status: string; acknowledged: boolean; message: string }[];
   transcript: { index: number; speaker: string; text: string; ts: string; tags: string[] }[];
   evidence: any | null;
