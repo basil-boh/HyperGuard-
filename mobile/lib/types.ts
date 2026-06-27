@@ -26,7 +26,19 @@ export interface Recipient {
   name: string;
   account: string;
   bank: string;
+  phone: string | null;
+  country: string | null;
   saved: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  phone: string;
+  account_number: string;
+  balance: number;
+  currency: string;
+  is_app_user: boolean;
 }
 
 export interface Contact {

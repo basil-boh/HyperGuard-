@@ -65,7 +65,9 @@ class RiskEngine:
         raw: list[tuple[RiskSignal, float]] = []  # (signal, weighted evidence)
 
         # 1) New payee, the single strongest predictor of authorised-push fraud.
-        if txn.payee_name not in customer.known_payees:
+        #    For phone (PayNow) transfers the `unknown_number` signal below is the
+        #    identity check instead, so we don't double-count the same first-time event.
+        if not txn.payee_phone and txn.payee_name not in customer.known_payees:
             raw.append(
                 (
                     self._signal(
@@ -126,6 +128,38 @@ class RiskEngine:
                     0.9,
                 )
             )
+
+        # 4b) Unknown number, the PayNow analogue of a new payee: paying a mobile
+        #     number the customer has never transacted with or saved.
+        if txn.payee_phone and txn.payee_phone not in customer.known_payee_phones:
+            raw.append(
+                (
+                    self._signal(
+                        "unknown_number",
+                        "First transfer to this phone number",
+                        "alarm",
+                        f"{txn.payee_phone} is not a saved recipient or trusted contact.",
+                    ),
+                    1.4,
+                )
+            )
+
+        # 4c) Overseas number, a strong money-mule indicator for a local customer.
+        if txn.payee_phone:
+            payee_country = txn.payee_country or customer.home_country
+            if payee_country != customer.home_country:
+                raw.append(
+                    (
+                        self._signal(
+                            "overseas_number",
+                            "Overseas phone recipient",
+                            "warn",
+                            f"{txn.payee_phone} resolves to {payee_country}, "
+                            f"outside {customer.home_country}.",
+                        ),
+                        1.3,
+                    )
+                )
 
         # 5) Coercion language in the memo.
         memo = (txn.memo or "").lower()

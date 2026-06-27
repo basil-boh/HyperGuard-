@@ -18,9 +18,13 @@ import { api } from "@/lib/api";
 import { color, font, radius } from "@/lib/theme";
 import type { Recipient } from "@/lib/types";
 
+const PAYNOW = "__paynow__"; // sentinel for the ad-hoc "pay a number" option
+
 export default function Transfer() {
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [payName, setPayName] = useState("");
+  const [payPhone, setPayPhone] = useState("+65");
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,19 +34,28 @@ export default function Transfer() {
   }, []);
 
   const amountNum = parseFloat(amount || "0");
-  const valid = selected && amountNum > 0;
+  const paynowValid = payName.trim().length > 0 && payPhone.trim().length >= 4;
+  const valid =
+    amountNum > 0 && (selected === PAYNOW ? paynowValid : !!selected);
 
   const send = async () => {
     if (!valid) return;
     setBusy(true);
     try {
-      const res = await api.transfer({ recipient_id: selected!, amount: amountNum, memo: memo || undefined });
+      const body =
+        selected === PAYNOW
+          ? { payee_name: payName.trim(), payee_phone: payPhone.trim(), amount: amountNum, memo: memo || undefined }
+          : { recipient_id: selected!, amount: amountNum, memo: memo || undefined };
+      const res = await api.transfer(body);
       router.replace(`/intervention/${res.case_id}`);
     } catch (e: any) {
       Alert.alert("Transfer failed", e?.message ?? "Please try again.");
       setBusy(false);
     }
   };
+
+  const recipientMeta = (r: Recipient) =>
+    r.phone ? `PayNow · ${r.phone}` : `${r.bank} · ${r.account}`;
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -90,9 +103,7 @@ export default function Transfer() {
                   <Avatar name={r.name} tint={active ? color.signal : color.ice} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rName}>{r.name}</Text>
-                    <Text style={styles.rMeta}>
-                      {r.bank} · {r.account}
-                    </Text>
+                    <Text style={styles.rMeta}>{recipientMeta(r)}</Text>
                   </View>
                   <Ionicons
                     name={active ? "radio-button-on" : "radio-button-off"}
@@ -102,9 +113,36 @@ export default function Transfer() {
                 </Pressable>
               );
             })}
+
+            {/* Ad-hoc PayNow to a phone number */}
+            <Pressable
+              onPress={() => setSelected(PAYNOW)}
+              style={[styles.recipient, selected === PAYNOW && { borderColor: color.signal, backgroundColor: color.signalSoft }]}
+            >
+              <View style={styles.paynowIcon}>
+                <Ionicons name="call" size={18} color={selected === PAYNOW ? color.signal : color.ice} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rName}>PayNow to a number</Text>
+                <Text style={styles.rMeta}>Send to a mobile number</Text>
+              </View>
+              <Ionicons
+                name={selected === PAYNOW ? "radio-button-on" : "radio-button-off"}
+                size={20}
+                color={selected === PAYNOW ? color.signal : color.faint}
+              />
+            </Pressable>
+
+            {selected === PAYNOW ? (
+              <View style={styles.paynowForm}>
+                <TextInput value={payName} onChangeText={setPayName} placeholder="Recipient name" placeholderTextColor={color.faint} style={styles.paynowInput} />
+                <TextInput value={payPhone} onChangeText={setPayPhone} placeholder="+65 9123 4567" placeholderTextColor={color.faint} style={styles.paynowInput} keyboardType="phone-pad" />
+              </View>
+            ) : null}
+
             <Pressable style={styles.addNew} onPress={() => router.push("/add-recipient")}>
               <Ionicons name="add" size={18} color={color.signal} />
-              <Text style={styles.addNewText}>New payee</Text>
+              <Text style={styles.addNewText}>Save a new payee</Text>
             </Pressable>
           </View>
 
@@ -142,8 +180,11 @@ const styles = StyleSheet.create({
   chip: { borderRadius: radius.pill, borderWidth: 1, borderColor: color.hairline, paddingHorizontal: 14, paddingVertical: 7 },
   chipText: { color: color.muted, fontSize: 13, fontWeight: font.medium },
   recipient: { flexDirection: "row", alignItems: "center", gap: 13, borderRadius: radius.md, borderWidth: 1, borderColor: color.hairline, padding: 12 },
+  paynowIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: color.raised, alignItems: "center", justifyContent: "center" },
   rName: { color: color.ink, fontSize: 15, fontWeight: font.semi },
   rMeta: { color: color.faint, fontSize: 12, marginTop: 2, fontVariant: ["tabular-nums"] },
+  paynowForm: { gap: 10, paddingLeft: 4 },
+  paynowInput: { color: color.ink, fontSize: 15, backgroundColor: color.surface, borderRadius: radius.md, borderWidth: 1, borderColor: color.hairline, padding: 13 },
   addNew: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1, borderStyle: "dashed", borderColor: color.hairline },
   addNewText: { color: color.signal, fontSize: 14, fontWeight: font.semi },
   memo: { marginTop: 10, color: color.ink, fontSize: 15, backgroundColor: color.surface, borderRadius: radius.md, borderWidth: 1, borderColor: color.hairline, padding: 14 },

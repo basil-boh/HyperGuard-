@@ -11,7 +11,7 @@ import asyncio
 import logging
 
 from app.config import Settings
-from app.schemas import CustomerProfile, InterventionOutcome
+from app.schemas import CustomerProfile, Decision, InterventionOutcome
 
 logger = logging.getLogger("hyperguard.store")
 
@@ -46,16 +46,32 @@ class SupabaseStore:
         client = self._connect()
         if client is None:
             return
+        txn = (
+            outcome.evidence.transaction.model_dump(mode="json")
+            if (outcome.evidence and outcome.evidence.transaction)
+            else {"id": outcome.transaction_id}
+        )
         row = {
             "case_id": case_id,
-            "customer_id": customer.id,
-            "customer_name": customer.name,
+            "user_id": customer.id,
+            "user_name": customer.name,
+            "transaction": txn,
             "decision": outcome.decision.value,
+            "status": "approved" if outcome.decision == Decision.approve else "blocked",
             "risk_score": outcome.risk.score,
+            "band": outcome.risk.band.value,
+            "risk_signals": [s.model_dump() for s in outcome.risk.signals],
+            "rationale": outcome.risk.rationale,
             "scam_type": outcome.classification.archetype.value
             if outcome.classification
             else None,
-            "outcome": outcome.model_dump(mode="json"),
+            "classification": outcome.classification.model_dump(mode="json")
+            if outcome.classification
+            else None,
+            "guardian_alerts": [a.model_dump(mode="json") for a in outcome.guardian_alerts],
+            "transcript": [t.model_dump(mode="json") for t in outcome.transcript],
+            "evidence": outcome.evidence.model_dump(mode="json") if outcome.evidence else None,
+            "narrative": outcome.narrative,
         }
         try:
             await asyncio.to_thread(lambda: client.table("cases").upsert(row).execute())

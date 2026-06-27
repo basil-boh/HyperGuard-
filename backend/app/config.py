@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     # a live operation rather than an instant dump. Set to 0 for tests.
     demo_step_delay: float = 0.75
 
+    # ── Multi-user / behaviour ──────────────────────────────────────────────────
+    # The account a request maps to when no X-User-Id header is sent (back-compat
+    # with the single-user demo client).
+    default_app_user_id: str = "acc_alex"
+    # ISO country customers bank in; transfers to other countries score as overseas.
+    home_country: str = "SG"
+    # Minimum outbound transactions before behavioural baselines are "learned"
+    # rather than using lenient cold-start defaults.
+    baseline_min_transactions: int = 5
+
     # ── LLM ────────────────────────────────────────────────────────────────────
     openai_api_key: str | None = None
     llm_model: str = "gpt-5.5"

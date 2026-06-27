@@ -4,4 +4,3 @@ dist/
 web-build/
 *.log
 .DS_Store
-expo-env.d.ts

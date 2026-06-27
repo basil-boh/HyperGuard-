@@ -26,6 +26,7 @@ from app.schemas import (
     TransactionStatus,
     TrustedContact,
 )
+from app.services.phone import parse_country
 
 
 def _now() -> datetime:
@@ -43,6 +44,8 @@ class Recipient:
     name: str
     account: str
     bank: str
+    phone: str | None = None
+    country: str | None = None
     saved: bool = True
     archetype: ScamArchetype | None = None
 
@@ -60,6 +63,7 @@ class LedgerEntry:
     scam_type: str | None = None
     memo: str | None = None
     case_id: str | None = None
+    counterparty_phone: str | None = None
 
     def json(self) -> dict:
         return {
@@ -67,6 +71,7 @@ class LedgerEntry:
             "ts": _iso(self.ts),
             "direction": self.direction,
             "counterparty": self.counterparty,
+            "counterparty_phone": self.counterparty_phone,
             "amount": self.amount,
             "status": self.status,
             "decision": self.decision,
@@ -128,6 +133,32 @@ class CaseRecord:
         }}
 
 
+def build_case_record(
+    account: "Account", txn: TransactionRequest, outcome: InterventionOutcome, case_id: str
+) -> CaseRecord:
+    """Fold a finished intervention into the durable case shape the control centre
+    reads. Shared by the in-memory Bank and the Supabase repository."""
+    return CaseRecord(
+        case_id=case_id,
+        user_id=account.owner.id,
+        user_name=account.owner.name,
+        created_at=_iso(_now()),
+        transaction=txn.model_dump(mode="json"),
+        decision=outcome.decision.value,
+        status="approved" if outcome.decision == Decision.approve else "blocked",
+        risk_score=outcome.risk.score,
+        band=outcome.risk.band.value,
+        risk_signals=[s.model_dump() for s in outcome.risk.signals],
+        rationale=outcome.risk.rationale,
+        scam_type=outcome.classification.archetype.value if outcome.classification else None,
+        classification=outcome.classification.model_dump(mode="json") if outcome.classification else None,
+        guardian_alerts=[a.model_dump(mode="json") for a in outcome.guardian_alerts],
+        transcript=[t.model_dump(mode="json") for t in outcome.transcript],
+        evidence=outcome.evidence.model_dump(mode="json") if outcome.evidence else None,
+        narrative=outcome.narrative,
+    )
+
+
 # ── Account ──────────────────────────────────────────────────────────────────
 class Account:
     def __init__(
@@ -176,8 +207,18 @@ class Account:
         return [e.json() for e in sorted(self.ledger, key=lambda e: e.ts, reverse=True)]
 
     def list_recipients(self) -> list[dict]:
+        # NOTE: archetype is intentionally never serialised out — the hidden scam
+        # tag must not leak to the client.
         return [
-            {"id": r.id, "name": r.name, "account": r.account, "bank": r.bank, "saved": r.saved}
+            {
+                "id": r.id,
+                "name": r.name,
+                "account": r.account,
+                "bank": r.bank,
+                "phone": r.phone,
+                "country": r.country,
+                "saved": r.saved,
+            }
             for r in self.recipients
         ]
 
@@ -185,10 +226,32 @@ class Account:
         return [c.model_dump() for c in self.owner.trusted_contacts]
 
     # writes --------------------------------------------------------------------
-    def add_recipient(self, name: str, account: str, bank: str) -> dict:
-        rcp = Recipient(id=f"rcp_{uuid4().hex[:8]}", name=name, account=account, bank=bank)
+    def add_recipient(
+        self,
+        name: str,
+        account: str,
+        bank: str,
+        phone: str | None = None,
+        country: str | None = None,
+    ) -> dict:
+        rcp = Recipient(
+            id=f"rcp_{uuid4().hex[:8]}",
+            name=name,
+            account=account,
+            bank=bank,
+            phone=phone,
+            country=country or parse_country(phone),
+        )
         self.recipients.append(rcp)
-        return {"id": rcp.id, "name": rcp.name, "account": rcp.account, "bank": rcp.bank, "saved": True}
+        return {
+            "id": rcp.id,
+            "name": rcp.name,
+            "account": rcp.account,
+            "bank": rcp.bank,
+            "phone": rcp.phone,
+            "country": rcp.country,
+            "saved": True,
+        }
 
     def add_contact(self, name: str, phone: str, relationship: str) -> dict:
         contact = TrustedContact(
@@ -210,7 +273,14 @@ class Account:
         return next((r for r in self.recipients if r.id == recipient_id), None)
 
     def build_transaction(
-        self, *, payee_name: str, payee_account: str, amount: float, memo: str | None, archetype: ScamArchetype | None
+        self,
+        *,
+        payee_name: str,
+        payee_account: str,
+        amount: float,
+        memo: str | None,
+        archetype: ScamArchetype | None,
+        payee_phone: str | None = None,
     ) -> TransactionRequest:
         recent = sum(1 for e in self.ledger if e.direction == "out" and e.ts >= _now() - timedelta(hours=24))
         return TransactionRequest(
@@ -220,6 +290,8 @@ class Account:
             currency=self.currency,
             payee_name=payee_name,
             payee_account=payee_account,
+            payee_phone=payee_phone,
+            payee_country=parse_country(payee_phone),
             channel="wallet_app",
             memo=memo,
             requested_at=_now(),
@@ -243,6 +315,7 @@ class Account:
             scam_type=outcome.classification.archetype.value if outcome.classification else None,
             memo=txn.memo,
             case_id=case_id,
+            counterparty_phone=txn.payee_phone,
         )
         self.ledger.insert(0, entry)
         return entry
@@ -252,10 +325,16 @@ class Account:
 class Bank:
     APP_USER = "acc_alex"
 
-    def __init__(self) -> None:
+    def __init__(self, seed: bool = True) -> None:
         self.accounts: dict[str, Account] = {}
         self.cases: dict[str, CaseRecord] = {}
-        self.reset()
+        if seed:
+            self.reset()
+
+    @classmethod
+    def empty(cls) -> "Bank":
+        """An unseeded bank — used when state is hydrated from persistence."""
+        return cls(seed=False)
 
     def account(self, user_id: str) -> Account | None:
         return self.accounts.get(user_id)
@@ -268,25 +347,7 @@ class Bank:
 
     # case recording ------------------------------------------------------------
     def record_case(self, account: Account, txn: TransactionRequest, outcome: InterventionOutcome, case_id: str) -> None:
-        self.cases[case_id] = CaseRecord(
-            case_id=case_id,
-            user_id=account.owner.id,
-            user_name=account.owner.name,
-            created_at=_iso(_now()),
-            transaction=txn.model_dump(mode="json"),
-            decision=outcome.decision.value,
-            status="approved" if outcome.decision == Decision.approve else "blocked",
-            risk_score=outcome.risk.score,
-            band=outcome.risk.band.value,
-            risk_signals=[s.model_dump() for s in outcome.risk.signals],
-            rationale=outcome.risk.rationale,
-            scam_type=outcome.classification.archetype.value if outcome.classification else None,
-            classification=outcome.classification.model_dump(mode="json") if outcome.classification else None,
-            guardian_alerts=[a.model_dump(mode="json") for a in outcome.guardian_alerts],
-            transcript=[t.model_dump(mode="json") for t in outcome.transcript],
-            evidence=outcome.evidence.model_dump(mode="json") if outcome.evidence else None,
-            narrative=outcome.narrative,
-        )
+        self.cases[case_id] = build_case_record(account, txn, outcome, case_id)
 
     def cases_for(self, user_id: str) -> list[CaseRecord]:
         return sorted(
@@ -398,15 +459,16 @@ def _seed_bank(bank: Bank) -> None:
             baseline_avg_amount=360.0, baseline_std_amount=220.0,
             typical_hour_start=8, typical_hour_end=21, typical_velocity_per_day=1.5,
             known_payees=["NTUC FairPrice", "SP Group", "Sarah Tan", "City Clinic"],
+            known_payee_phones=["+6591234567"],  # Sarah, paid before
             trusted_contacts=[_contact("koc_marcus", "Marcus Tan", "+6580000010", "son", 1)],
         ),
         account_number="DBS •••• 4471", balance=24_500.0,
         recipients=[
             Recipient("rcp_ntuc", "NTUC FairPrice", "100-000111-2", "OCBC"),
-            Recipient("rcp_sarah", "Sarah Tan", "210-887654-9", "DBS"),
+            Recipient("rcp_sarah", "Sarah Tan", "210-887654-9", "DBS", phone="+6591234567", country="SG"),
             Recipient("rcp_sp", "SP Group", "330-110022-4", "UOB"),
-            Recipient("rcp_quick", "Quick Holdings Pte Ltd", "884-220931-0", "Standard Chartered", archetype=ScamArchetype.government_impersonation),
-            Recipient("rcp_crypto", "CryptoGain Capital", "771-559020-8", "Wise", archetype=ScamArchetype.investment),
+            Recipient("rcp_quick", "Quick Holdings Pte Ltd", "884-220931-0", "Standard Chartered", phone="+60182233445", country="MY", archetype=ScamArchetype.government_impersonation),
+            Recipient("rcp_crypto", "CryptoGain Capital", "771-559020-8", "Wise", phone="+85291234567", country="HK", archetype=ScamArchetype.investment),
         ],
     )
     alex.ledger = [

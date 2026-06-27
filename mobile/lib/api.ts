@@ -1,16 +1,24 @@
 import { API_BASE } from "./config";
+import { getUserId } from "./session";
 import type {
   Contact,
   InterventionPoll,
   LedgerEntry,
   Recipient,
+  UserProfile,
   WalletSummary,
 } from "./types";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  // Identify the active user to the backend (falls back to the demo user server-side).
+  const uid = await getUserId();
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+    headers: {
+      "content-type": "application/json",
+      ...(uid ? { "X-User-Id": uid } : {}),
+      ...(init?.headers ?? {}),
+    },
   });
   if (!res.ok) {
     let detail = `${res.status}`;
@@ -23,13 +31,30 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  // identity
+  listUsers: () => req<UserProfile[]>("/api/users"),
+  createUser: (body: {
+    name: string;
+    phone: string;
+    age?: number;
+    vulnerability_flags?: string[];
+    home_country?: string;
+    initial_balance?: number;
+  }) => req<UserProfile>("/api/users", { method: "POST", body: JSON.stringify(body) }),
+
+  // wallet
   wallet: () => req<WalletSummary>("/api/wallet"),
   transactions: () => req<LedgerEntry[]>("/api/wallet/transactions"),
   recipients: () => req<Recipient[]>("/api/wallet/recipients"),
   contacts: () => req<Contact[]>("/api/wallet/contacts"),
 
-  addRecipient: (body: { name: string; account: string; bank: string }) =>
-    req<Recipient>("/api/wallet/recipients", { method: "POST", body: JSON.stringify(body) }),
+  addRecipient: (body: {
+    name: string;
+    account?: string;
+    bank?: string;
+    phone?: string;
+    country?: string;
+  }) => req<Recipient>("/api/wallet/recipients", { method: "POST", body: JSON.stringify(body) }),
 
   addContact: (body: { name: string; phone: string; relationship: string }) =>
     req<Contact>("/api/wallet/contacts", { method: "POST", body: JSON.stringify(body) }),
@@ -41,6 +66,7 @@ export const api = {
     recipient_id?: string;
     payee_name?: string;
     payee_account?: string;
+    payee_phone?: string;
     amount: number;
     memo?: string;
   }) =>

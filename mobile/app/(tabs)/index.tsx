@@ -23,10 +23,15 @@ export default function Home() {
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <ShieldLogo />
-          <Pressable style={styles.protected} onPress={() => router.push("/family")}>
-            <Ionicons name="shield-checkmark" size={13} color={color.signal} />
-            <Text style={styles.protectedText}>Protected</Text>
-          </Pressable>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Pressable style={styles.switcher} onPress={() => router.push("/select-user")} hitSlop={8}>
+              <Ionicons name="people" size={16} color={color.muted} />
+            </Pressable>
+            <Pressable style={styles.protected} onPress={() => router.push("/family")}>
+              <Ionicons name="shield-checkmark" size={13} color={color.signal} />
+              <Text style={styles.protectedText}>Protected</Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Balance */}
@@ -117,6 +122,15 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   protectedText: { color: color.signal, fontSize: 12, fontWeight: font.semi },
+  switcher: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: color.hairline,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   balanceCard: {
     borderRadius: radius.lg,
     padding: 22,

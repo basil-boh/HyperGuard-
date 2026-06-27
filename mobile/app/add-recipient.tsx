@@ -9,17 +9,24 @@ import { color, font, radius } from "@/lib/theme";
 
 export default function AddRecipient() {
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [account, setAccount] = useState("");
   const [bank, setBank] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const valid = name.trim() && account.trim();
+  // A payee needs either a PayNow phone or a bank account.
+  const valid = !!name.trim() && (!!account.trim() || phone.trim().length >= 4);
 
   const save = async () => {
     if (!valid) return;
     setBusy(true);
     try {
-      await api.addRecipient({ name: name.trim(), account: account.trim(), bank: bank.trim() || "—" });
+      await api.addRecipient({
+        name: name.trim(),
+        phone: phone.trim() || undefined,
+        account: account.trim() || "—",
+        bank: bank.trim() || "—",
+      });
       router.back();
     } catch (e: any) {
       Alert.alert("Couldn't add payee", e?.message ?? "Try again.");
@@ -41,7 +48,9 @@ export default function AddRecipient() {
         <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
           <Kicker>Payee name</Kicker>
           <TextInput value={name} onChangeText={setName} placeholder="e.g. John Contractor" placeholderTextColor={color.faint} style={styles.input} autoFocus />
-          <Kicker>Account number</Kicker>
+          <Kicker>PayNow phone (optional)</Kicker>
+          <TextInput value={phone} onChangeText={setPhone} placeholder="+65 9123 4567" placeholderTextColor={color.faint} style={styles.input} keyboardType="phone-pad" />
+          <Kicker>Account number (optional)</Kicker>
           <TextInput value={account} onChangeText={setAccount} placeholder="000-000000-0" placeholderTextColor={color.faint} style={styles.input} keyboardType="numbers-and-punctuation" />
           <Kicker>Bank (optional)</Kicker>
           <TextInput value={bank} onChangeText={setBank} placeholder="e.g. DBS" placeholderTextColor={color.faint} style={styles.input} />
@@ -49,7 +58,7 @@ export default function AddRecipient() {
           <View style={styles.note}>
             <Ionicons name="information-circle" size={16} color={color.faint} />
             <Text style={styles.noteText}>
-              New payees you've never paid before are scored as higher risk, HyperGuard may verify the first transfer with a call.
+              New payees you've never paid before — especially overseas or unknown numbers — are scored as higher risk. HyperGuard may verify the first transfer with a call.
             </Text>
           </View>
         </ScrollView>

@@ -79,6 +79,11 @@ class CustomerProfile(BaseModel):
     typical_hour_end: int = 22
     typical_velocity_per_day: float = 1.5
     known_payees: list[str] = Field(default_factory=list)
+    # Phone numbers (E.164) this customer has paid before or saved — the PayNow
+    # analogue of `known_payees`, used by the unknown-number signal.
+    known_payee_phones: list[str] = Field(default_factory=list)
+    # ISO country the customer banks in; anything else is "overseas".
+    home_country: str = "SG"
     trusted_contacts: list[TrustedContact] = Field(default_factory=list)
 
 
@@ -89,6 +94,9 @@ class TransactionRequest(BaseModel):
     currency: str = "SGD"
     payee_name: str
     payee_account: str
+    # PayNow-style transfers target a mobile number; account stays for bank transfers.
+    payee_phone: str | None = None
+    payee_country: str | None = None  # derived from payee_phone at build time
     channel: str = "mobile_app"
     memo: str | None = None
     requested_at: datetime

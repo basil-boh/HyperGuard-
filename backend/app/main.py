@@ -12,10 +12,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, routes, wallet, ws
+from app.api import admin, routes, users, wallet, ws
 from app.config import get_settings
 from app.integrations.event_bus import get_event_bus
 from app.wallet.registry import get_registry
+from app.wallet.repository import get_repository
+from app.wallet.seed_supabase import ensure_seeded
 
 logging.basicConfig(
     level=get_settings().log_level,
@@ -31,6 +33,8 @@ async def lifespan(app: FastAPI):
     await bus.connect()
     registry = get_registry()
     await registry.start()
+    if settings.persistence_enabled:
+        await ensure_seeded(get_repository())
     logger.info(
         "HyperGuard online, capabilities: %s",
         ", ".join(f"{k}={v}" for k, v in settings.capability_report().items()),
@@ -57,6 +61,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(routes.router)
     app.include_router(wallet.router)
+    app.include_router(users.router)
     app.include_router(admin.router)
     app.include_router(ws.router)
 
