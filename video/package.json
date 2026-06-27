@@ -1,0 +1,9 @@
+{
+  "name": "hyperguard-video",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "dependencies": {
+    "playwright": "^1.49.1"
+  }
+}

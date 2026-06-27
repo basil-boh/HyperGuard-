@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "HyperGuard Wallet",
+    "slug": "hyperguard-wallet",
+    "scheme": "hyperguard",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#07080c",
+    "newArchEnabled": false,
+    "splash": {
+      "backgroundColor": "#07080c",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hyperguard.wallet"
+    },
+    "android": {
+      "package": "com.hyperguard.wallet"
+    },
+    "plugins": ["expo-router"]
+  }
+}

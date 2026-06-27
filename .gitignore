@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node / Next
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Env & secrets
+.env
+.env.local
+*.local
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Generated video artifacts (regenerable via render scripts)
+video/frames/
+video/audio/
+video/out/

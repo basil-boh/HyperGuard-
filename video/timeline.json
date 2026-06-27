@@ -1,0 +1,105 @@
+{
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "total": 117.545713,
+  "scenes": [
+    {
+      "id": "hook",
+      "start": 0,
+      "dur": 7.953061,
+      "capDur": 7.053061,
+      "captions": [
+        "2:00 AM.",
+        "Auntie May is about to wire $8,000 to a scammer.",
+        "She thinks she’s doing the right thing."
+      ]
+    },
+    {
+      "id": "problem",
+      "start": 7.953061,
+      "dur": 16.26449,
+      "capDur": 15.46449,
+      "captions": [
+        "Detection flags fraud — AFTER the money is gone.",
+        "The victim sends it willingly, by their own hand.",
+        "The gap is the human moment.",
+        "The 60 seconds between “I’ll send it” and “money sent.”"
+      ]
+    },
+    {
+      "id": "solution",
+      "start": 24.217551,
+      "dur": 14.540408000000001,
+      "capDur": 13.740408,
+      "captions": [
+        "HyperGuard — an autonomous fraud-intervention swarm.",
+        "It catches the victim mid-scam.",
+        "Calls them. Talks them out of it. Loops in family.",
+        "And if it’s too late — builds the evidence to recover."
+      ]
+    },
+    {
+      "id": "different",
+      "start": 38.757959,
+      "dur": 15.663673000000001,
+      "capDur": 14.863673,
+      "captions": [
+        "Existing shields stop at DETECT + REPORT.",
+        "No real-time intervention. No family layer. No recovery.",
+        "HyperGuard owns the entire loop.",
+        "Not just better — necessary."
+      ]
+    },
+    {
+      "id": "swarm",
+      "start": 54.421632,
+      "dur": 21.28,
+      "capDur": 20.48,
+      "captions": [
+        "Five specialized agents act as one.",
+        "Digital Twin — scores risk vs. your baseline.",
+        "Voice Negotiator — calls you live.",
+        "Educator — names the scam, warns in real time.",
+        "Guardian — alerts someone you trust.",
+        "Recovery Coordinator — builds the evidence package."
+      ]
+    },
+    {
+      "id": "architecture",
+      "start": 75.701632,
+      "dur": 17.23102,
+      "capDur": 16.43102,
+      "captions": [
+        "Under the hood: a LangGraph state machine.",
+        "Low risk → approved instantly.",
+        "High risk → live intervention.",
+        "Edges route on risk, verification & scam type.",
+        "One explainable decision: APPROVE or BLOCK."
+      ]
+    },
+    {
+      "id": "stack",
+      "start": 92.932652,
+      "dur": 14.409796,
+      "capDur": 13.609796,
+      "captions": [
+        "Built on a real-time stack.",
+        "Next.js console · FastAPI · LangGraph",
+        "GPT-class reasoning · Twilio · ElevenLabs voice",
+        "Supabase + pgvector · Redis Streams"
+      ]
+    },
+    {
+      "id": "close",
+      "start": 107.342448,
+      "dur": 10.203265,
+      "capDur": 8.803265,
+      "captions": [
+        "Detection tells you AFTER.",
+        "HyperGuard intervenes DURING — and recovers AFTER.",
+        "An AI agent in the room, when it matters most."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,294 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   HyperGuard, interdiction console design tokens
+   ───────────────────────────────────────────────────────────────────────────── */
+:root {
+  --void: #07080c;
+  --abyss: #0a0c12;
+  --surface: #0f1218;
+  --raised: #141822;
+  --hairline: rgba(141, 152, 178, 0.14);
+  --ink: #e9ebf2;
+  --muted: #9aa1b4;
+  --faint: #5c6378;
+
+  --signal: #c9f24a; /* acid-lime: shield active / safe / live */
+  --signal-dim: rgba(201, 242, 74, 0.22);
+  --ice: #79d6e6; /* cool telemetry accent */
+  --amber: #ffc24b;
+  --ember: #ff7a45;
+  --crimson: #ff4d5e;
+
+  --grid: rgba(141, 152, 178, 0.05);
+}
+
+* {
+  border-color: var(--hairline);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--void);
+  color: var(--ink);
+  font-feature-settings: "ss01", "cv01", "tnum";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--signal-dim);
+  color: var(--ink);
+}
+
+/* Thin, console-grade scrollbars */
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--raised);
+  border-radius: 8px;
+  border: 2px solid var(--void);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Typographic primitives ──────────────────────────────────────────────────
+   A "readout" is HyperGuard's signature label: mono, uppercase, widely tracked. */
+.readout {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 0.62rem;
+  color: var(--faint);
+}
+
+.numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The grid field: faint surveyor's grid + vignette behind the whole app ──── */
+.grid-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 20%, #000 35%, transparent 100%);
+}
+
+/* ── Bracketed HUD frame ─────────────────────────────────────────────────────
+   Four corner ticks drawn with pseudo-elements; reused as a class, not a div. */
+.bracketed {
+  position: relative;
+}
+.bracketed::before,
+.bracketed::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--faint);
+  pointer-events: none;
+}
+.bracketed::before {
+  top: -1px;
+  left: -1px;
+  border-top: 1.5px solid;
+  border-left: 1.5px solid;
+}
+.bracketed::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 1.5px solid;
+  border-right: 1.5px solid;
+}
+
+/* ── Scanline overlay (used inside the risk meter while analysing) ──────────── */
+.scanline {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.scanline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 38%;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(201, 242, 74, 0.12),
+    transparent
+  );
+  animation: sweep 2.4s linear infinite;
+}
+
+/* ── Hairline divider with a centred tick ──────────────────────────────────── */
+.rule {
+  height: 1px;
+  background: var(--hairline);
+}
+
+/* ── Focus ring, console-styled ───────────────────────────────────────────── */
+:focus-visible {
+  outline: 1px solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* ── Scroll-story illustrations ─────────────────────────────────────────────── */
+/* Stroke paths tagged .draw start hidden; GSAP draws them in on scroll. */
+.draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+@keyframes wave-out {
+  0% {
+    transform: scale(0.35);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+.wave-arc {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: wave-out 2.8s ease-out infinite;
+}
+.wave-arc.w2 {
+  animation-delay: 0.95s;
+}
+.wave-arc.w3 {
+  animation-delay: 1.9s;
+}
+
+@keyframes ring-pulse {
+  0%,
+  100% {
+    opacity: 0.12;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.1);
+  }
+}
+.ring-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ring-pulse 2.3s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+.blink {
+  animation: blink 1.3s ease-in-out infinite;
+}
+
+/* Flowing dashes along a route (money leaving toward the destination). */
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -9;
+  }
+}
+.flow-dash {
+  animation: dash-flow 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ── Dark/light shared token: text that always sits on the lime signal ──────── */
+:root {
+  --on-signal: #0a0c05;
+}
+
+/* ── Hero word shimmer ──────────────────────────────────────────────────────── */
+@keyframes shimmer-sweep {
+  to {
+    background-position: -200% center;
+  }
+}
+.shimmer-text {
+  background: linear-gradient(100deg, var(--signal) 28%, #eaf7b0 50%, var(--signal) 72%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: shimmer-sweep 3.4s linear infinite;
+}
+
+/* ── Scroll progress bar ────────────────────────────────────────────────────── */
+.scroll-progress {
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+/* ── Marquee ticker ─────────────────────────────────────────────────────────── */
+@keyframes marquee-x {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  will-change: transform;
+  animation: marquee-x 28s linear infinite;
+}
+
+/* ── Cream light theme ──────────────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --void: #f3eede;
+  --abyss: #ece4d2;
+  --surface: #fbf7ed;
+  --raised: #ebe4d3;
+  --hairline: rgba(48, 42, 28, 0.16);
+  --ink: #1d1b13;
+  --muted: #5b5544;
+  --faint: #8b8470;
+  --signal: #6f9c14;
+  --signal-dim: rgba(111, 156, 20, 0.16);
+  --ice: #1f8ea4;
+  --amber: #b07315;
+  --ember: #bf4f1d;
+  --crimson: #cf3848;
+  --grid: rgba(48, 42, 28, 0.055);
+  color-scheme: light;
+}

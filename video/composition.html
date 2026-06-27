@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>HyperGuard — Composition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="./assets/gsap.min.js"></script>
+<style>
+  :root{
+    /* HyperGuard interdiction-console tokens (matches frontend/app/globals.css) */
+    --bg0:#07080c; --bg1:#0a0c12; --bg2:#0f1218;
+    --ink:#e9ebf2; --muted:#9aa1b4; --faint:#5c6378;
+    --signal:#c9f24a; --ice:#79d6e6;            /* acid-lime + cool telemetry */
+    --cyan:#c9f24a; --cyan2:#dcff77; --blue:#79d6e6;   /* aliases → brand */
+    --violet:#79d6e6; --danger:#ff4d5e; --safe:#c9f24a; --amber:#ffc24b; --ember:#ff7a45;
+    --line:rgba(141,152,178,.14);
+    --panel:rgba(18,22,30,.62);
+    --panelB:rgba(141,152,178,.18);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg0);
+    font-family:'Inter',system-ui,sans-serif;color:var(--ink);
+    -webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+  #stage{position:relative;width:1920px;height:1080px;overflow:hidden;isolation:isolate}
+
+  /* ---------- background ---------- */
+  #bg{position:absolute;inset:0;
+    background:
+      radial-gradient(1200px 720px at 22% 12%, rgba(201,242,74,.10), transparent 60%),
+      radial-gradient(1000px 700px at 84% 88%, rgba(121,214,230,.10), transparent 60%),
+      radial-gradient(900px 900px at 50% 50%, rgba(15,20,30,.55), transparent 70%),
+      linear-gradient(180deg,#07080c 0%, #0a0c12 50%, #07080c 100%);}
+  #grid{position:absolute;inset:-2px;opacity:.5;
+    background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+    background-size:64px 64px;mask:radial-gradient(circle at 50% 50%, #000 55%, transparent 92%)}
+  #scan{position:absolute;inset:0;opacity:.06;background:repeating-linear-gradient(0deg,#fff 0 1px,transparent 1px 4px)}
+  #particles{position:absolute;inset:0}
+  .pt{position:absolute;width:5px;height:5px;border-radius:50%;
+    background:radial-gradient(circle,#e7ffd0 0%, rgba(201,242,74,.42) 40%, transparent 70%)}
+  #vignette{position:absolute;inset:0;pointer-events:none;
+    box-shadow:inset 0 0 360px 60px rgba(0,0,0,.8), inset 0 0 120px rgba(0,0,0,.5)}
+  #glow{position:absolute;left:50%;top:50%;width:1100px;height:1100px;transform:translate(-50%,-50%);
+    background:radial-gradient(circle, rgba(201,242,74,.12), transparent 60%);filter:blur(20px);opacity:.0}
+
+  /* ---------- HUD chrome ---------- */
+  #chrome{position:absolute;inset:0;pointer-events:none}
+  .bracket{position:absolute;width:52px;height:52px;border:2px solid rgba(120,180,255,.35)}
+  .bracket.tl{left:46px;top:46px;border-right:0;border-bottom:0}
+  .bracket.tr{right:46px;top:46px;border-left:0;border-bottom:0}
+  .bracket.bl{left:46px;bottom:46px;border-right:0;border-top:0}
+  .bracket.br{right:46px;bottom:46px;border-left:0;border-top:0}
+  #hudTop{position:absolute;left:74px;top:58px;display:flex;align-items:center;gap:16px}
+  #hudMark{width:34px;height:40px}
+  #hudWord{font-weight:800;letter-spacing:.32em;font-size:17px;color:#cfe2ff}
+  #hudWord b{color:var(--cyan)}
+  #hudRight{position:absolute;right:74px;top:58px;text-align:right}
+  #hudIdx{font-size:15px;letter-spacing:.34em;color:var(--muted)}
+  #hudScene{font-size:13px;letter-spacing:.3em;color:var(--cyan);margin-top:5px;font-weight:600}
+  #progTrack{position:absolute;left:0;right:0;top:0;height:3px;background:rgba(120,160,220,.10)}
+  #progFill{position:absolute;left:0;top:0;height:3px;width:100%;transform:scaleX(0);transform-origin:left center;
+    background:linear-gradient(90deg,var(--cyan),var(--violet));box-shadow:0 0 16px rgba(34,229,255,.7)}
+  #hudFoot{position:absolute;left:74px;bottom:60px;font-size:13px;letter-spacing:.34em;color:var(--faint)}
+  #hudFoot b{color:var(--muted)}
+
+  /* ---------- captions ---------- */
+  #capWrap{position:absolute;left:50%;bottom:108px;transform:translateX(-50%);width:1480px;height:96px;
+    display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .cap{position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;
+    font-size:33px;font-weight:600;color:#eaf2ff;letter-spacing:.005em;opacity:0;
+    padding:14px 30px;border-radius:16px;
+    background:rgba(8,14,30,.46);border:1px solid rgba(120,170,255,.16);
+    backdrop-filter:blur(6px);text-shadow:0 2px 22px rgba(0,0,0,.7)}
+  .cap .hl{color:var(--cyan)}
+  .cap .dg{color:var(--danger)}
+  .cap .sf{color:var(--safe)}
+
+  /* ---------- scenes ---------- */
+  .scene{position:absolute;inset:0;opacity:0;visibility:hidden}
+  .center{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);text-align:center;width:1600px}
+  .kicker{font-size:18px;letter-spacing:.4em;color:var(--cyan);font-weight:700;text-transform:uppercase}
+  .h1{font-family:'Space Grotesk',Inter,sans-serif;font-size:104px;font-weight:700;letter-spacing:-.02em;line-height:1.02}
+  .h2{font-family:'Space Grotesk',Inter,sans-serif;font-size:74px;font-weight:700;letter-spacing:-.015em;line-height:1.05}
+  .sub{font-size:30px;color:var(--muted);font-weight:500}
+  .grad{background:linear-gradient(100deg,#fff 0%, var(--cyan2) 45%, var(--violet) 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .danger{color:var(--danger)} .safe{color:var(--safe)} .cyan{color:var(--cyan)} .amber{color:var(--amber)}
+
+  .panel{background:var(--panel);border:1px solid var(--panelB);border-radius:20px;backdrop-filter:blur(8px)}
+
+  /* scene: hook */
+  #s_hook .clock{font-size:128px;font-weight:800;letter-spacing:.02em}
+  .ringIcon{position:absolute;left:50%;top:24%;transform:translate(-50%,-50%)}
+  .ringWave{position:absolute;left:50%;top:24%;width:200px;height:200px;border-radius:50%;
+    border:2px solid rgba(255,77,94,.5);transform:translate(-50%,-50%) scale(.3);opacity:0}
+  .txChip{display:inline-flex;align-items:center;gap:22px;padding:22px 34px;border-radius:18px;
+    background:rgba(40,12,22,.5);border:1px solid rgba(255,59,92,.34);font-weight:700;font-size:36px}
+  .txChip .amt{font-size:44px;color:#fff}
+  .txChip .arrow{color:var(--danger);font-size:40px}
+  .txChip .to{color:var(--danger)}
+
+  /* scene: problem timeline */
+  .tlbar{position:relative;height:6px;width:1200px;margin:0 auto;background:rgba(120,160,220,.18);border-radius:6px}
+  .tlfill{position:absolute;left:0;top:0;height:6px;border-radius:6px;background:linear-gradient(90deg,var(--cyan),var(--danger));transform-origin:left;transform:scaleX(0)}
+  .tlmark{position:absolute;top:-9px;width:24px;height:24px;border-radius:50%;transform:transl(-50%,0);opacity:0}
+  .tllbl{position:absolute;top:24px;font-size:21px;font-weight:600;transform:translateX(-50%);opacity:0;white-space:nowrap}
+  .stamp{display:inline-block;border:4px solid var(--danger);color:var(--danger);font-weight:900;
+    padding:8px 22px;border-radius:12px;font-size:40px;letter-spacing:.06em;transform:rotate(-9deg)}
+
+  /* scene: different — comparison */
+  .vs{display:grid;grid-template-columns:1fr 130px 1fr;gap:0;align-items:stretch;width:1500px;margin:40px auto 0}
+  .col{padding:38px 40px;border-radius:22px}
+  .col.bad{background:rgba(30,16,26,.5);border:1px solid rgba(255,90,120,.22)}
+  .col.good{background:rgba(10,30,32,.5);border:1px solid rgba(46,230,166,.28);box-shadow:0 0 60px rgba(46,230,166,.12)}
+  .colTitle{font-size:30px;font-weight:800;margin-bottom:26px;letter-spacing:.01em}
+  .row{display:flex;align-items:center;gap:18px;font-size:28px;padding:14px 0;font-weight:600;opacity:0}
+  .row .ic{width:34px;height:34px;flex:0 0 34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:22px}
+  .ic.no{background:rgba(255,59,92,.16);color:var(--danger);border:1px solid rgba(255,59,92,.4)}
+  .ic.yes{background:rgba(46,230,166,.16);color:var(--safe);border:1px solid rgba(46,230,166,.45)}
+  .vsBadge{align-self:center;justify-self:center;font-weight:900;font-size:34px;color:var(--muted);
+    width:96px;height:96px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:rgba(10,16,34,.7);border:1px solid var(--line)}
+
+  /* scene: swarm */
+  #swarmField{position:absolute;left:50%;top:50%;width:1280px;height:840px;transform:translate(-50%,-50%)}
+  .agent{position:absolute;width:300px;transform:translate(-50%,-50%);opacity:0}
+  .agent .card{display:flex;gap:16px;align-items:flex-start;padding:18px 20px;border-radius:16px;
+    background:rgba(14,24,48,.72);border:1px solid rgba(120,170,255,.22);backdrop-filter:blur(6px)}
+  .agent .ico{width:46px;height:46px;flex:0 0 46px}
+  .agent .nm{font-size:23px;font-weight:800}
+  .agent .ds{font-size:16px;color:var(--muted);margin-top:3px;line-height:1.3}
+  .core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:150px;height:170px;opacity:0}
+  .coreLbl{position:absolute;left:50%;top:calc(50% + 104px);transform:translate(-50%,-50%);
+    font-size:15px;letter-spacing:.3em;color:var(--cyan);font-weight:700;opacity:0;white-space:nowrap}
+
+  /* scene: architecture */
+  #archField{position:absolute;left:50%;top:50%;width:1640px;height:760px;transform:translate(-50%,-50%)}
+  .node{position:absolute;transform:translate(-50%,-50%);padding:16px 20px;border-radius:14px;min-width:150px;
+    text-align:center;background:rgba(14,24,48,.8);border:1px solid rgba(120,170,255,.26);opacity:0}
+  .node .nt{font-size:21px;font-weight:800}
+  .node .nd{font-size:14px;color:var(--muted);margin-top:3px}
+  .node.dec{border-color:rgba(255,194,77,.5);background:rgba(34,26,8,.7)}
+  .pill{position:absolute;transform:translate(-50%,-50%);font-size:15px;font-weight:700;padding:7px 14px;border-radius:999px;opacity:0;white-space:nowrap}
+  .pill.ok{background:rgba(46,230,166,.14);color:var(--safe);border:1px solid rgba(46,230,166,.4)}
+  .pill.no{background:rgba(255,59,92,.14);color:var(--danger);border:1px solid rgba(255,59,92,.4)}
+  #riskBox{position:absolute;right:0;top:0;width:220px;opacity:0}
+  #riskNum{font-size:62px;font-weight:900}
+  #riskTrack{height:12px;border-radius:8px;background:rgba(120,160,220,.18);overflow:hidden;margin-top:8px}
+  #riskFill{height:12px;width:100%;transform:scaleX(0);transform-origin:left;border-radius:8px;
+    background:linear-gradient(90deg,var(--safe),var(--amber) 55%,var(--danger))}
+
+  /* scene: stack */
+  .stackGrid{display:flex;flex-direction:column;gap:22px;width:1500px;margin:30px auto 0}
+  .layer{display:grid;grid-template-columns:230px 1fr;gap:24px;align-items:center}
+  .layerName{font-size:20px;font-weight:700;letter-spacing:.16em;color:var(--cyan);text-transform:uppercase;text-align:right}
+  .chips{display:flex;gap:16px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:12px;padding:14px 22px;border-radius:14px;font-size:24px;font-weight:700;
+    background:rgba(16,28,54,.7);border:1px solid rgba(120,170,255,.22);opacity:0}
+  .chip .dot{width:13px;height:13px;border-radius:50%;box-shadow:0 0 12px currentColor}
+
+  /* scene: close */
+  #closeMark{width:150px;height:178px;opacity:0;margin:0 auto 30px}
+  .closeUrl{font-size:22px;letter-spacing:.3em;color:var(--muted);font-weight:600}
+
+  .svgline{fill:none;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg"></div>
+  <div id="grid"></div>
+  <div id="scan"></div>
+  <div id="glow"></div>
+  <div id="particles"></div>
+
+  <!-- ============ SCENES ============ -->
+
+  <!-- HOOK -->
+  <section class="scene" id="s_hook" data-scene="hook">
+    <svg class="ringIcon" width="120" height="120" viewBox="0 0 120 120">
+      <g class="svgline" stroke="#ff4d5e" stroke-width="6">
+        <path d="M38 30c-6 0-12 6-12 14 0 28 24 52 52 52 8 0 14-6 14-12 0-2-1-5-4-6l-16-6c-2-1-5 0-6 2l-4 6c-12-6-22-16-28-28l6-4c2-1 3-4 2-6l-6-16c-1-3-4-4-6-4z"/>
+      </g>
+    </svg>
+    <div class="ringWave"></div><div class="ringWave"></div><div class="ringWave"></div>
+    <div class="center">
+      <div class="clock mono" style="opacity:0" data-h="clock"><span class="danger">2</span>:00 <span style="font-size:64px;color:var(--muted)">AM</span></div>
+      <div style="margin-top:30px" data-h="chip">
+        <span class="txChip"><span class="amt mono">$8,000.00</span><span class="arrow">➜</span><span class="to">UNKNOWN “SAFE” ACCOUNT</span></span>
+      </div>
+      <div class="sub" style="margin-top:34px" data-h="line">She believes she’s doing the right thing.</div>
+    </div>
+  </section>
+
+  <!-- PROBLEM -->
+  <section class="scene" id="s_problem" data-scene="problem">
+    <div class="center" style="width:1400px">
+      <div class="kicker" data-h="kick">The gap nobody covers</div>
+      <div class="h2" style="margin-top:14px" data-h="title">Detection tells you <span class="danger">after</span>.</div>
+      <div style="margin-top:70px">
+        <div class="tlbar">
+          <div class="tlfill"></div>
+          <div class="tlmark" style="left:30%;background:var(--cyan)"></div>
+          <div class="tlmark" style="left:62%;background:var(--danger)"></div>
+          <div class="tlmark" style="left:88%;background:var(--danger)"></div>
+          <div class="tllbl" style="left:30%">money sent</div>
+          <div class="tllbl" style="left:62%;color:var(--danger)">⚠ fraud flagged</div>
+          <div class="tllbl" style="left:88%"><span class="stamp" style="font-size:24px;padding:4px 12px">TOO LATE</span></div>
+        </div>
+      </div>
+      <div class="h1 grad" style="font-size:80px;margin-top:120px" data-h="moment">THE HUMAN MOMENT</div>
+      <div class="sub mono" data-h="sixty" style="margin-top:14px">the 60 seconds between “I’ll send it” and “money sent”</div>
+    </div>
+  </section>
+
+  <!-- SOLUTION -->
+  <section class="scene" id="s_solution" data-scene="solution">
+    <div class="center">
+      <svg id="solMark" width="150" height="178" viewBox="0 0 120 140" style="opacity:0;margin:0 auto 22px;display:block">
+        <defs>
+          <linearGradient id="shieldGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#c9f24a"/><stop offset="1" stop-color="#79d6e6"/>
+          </linearGradient>
+        </defs>
+        <!-- HyperGuard logomark: shield whose interior IS the swarm (core + 4 satellites) -->
+        <path class="svgline shieldPath" d="M60 6 L110 28 V74 C110 104 88 124 60 134 C32 124 10 104 10 74 V28 Z"
+              stroke="url(#shieldGrad)" stroke-width="3.5" fill="rgba(201,242,74,0.05)"/>
+        <circle class="hgRing" cx="60" cy="74" r="34" fill="none" stroke="#79d6e6" stroke-width="1.6" opacity="0.6"/>
+        <circle class="hgSat" cx="60" cy="40" r="5" fill="#c9f24a"/>
+        <circle class="hgSat" cx="94" cy="74" r="5" fill="#c9f24a"/>
+        <circle class="hgSat" cx="60" cy="108" r="5" fill="#c9f24a"/>
+        <circle class="hgSat" cx="26" cy="74" r="5" fill="#c9f24a"/>
+        <circle class="hgCore" cx="60" cy="74" r="11" fill="#c9f24a"/>
+      </svg>
+      <div class="kicker" data-h="kick">We insert an AI agent into that moment</div>
+      <div class="h1" style="margin-top:10px" data-h="title">Hyper<span style="color:var(--signal)">Guard</span></div>
+      <div class="sub" style="margin-top:8px;font-size:34px" data-h="sub">Autonomous Fraud-Intervention Swarm</div>
+      <div style="margin-top:46px;display:flex;gap:18px;justify-content:center" data-h="verbs">
+        <span class="vchip">Catch</span><span class="vchip">Call</span><span class="vchip">Convince</span><span class="vchip">Recover</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- DIFFERENT -->
+  <section class="scene" id="s_different" data-scene="different">
+    <div class="center" style="width:1600px;top:48%">
+      <div class="kicker" data-h="kick">Why we’re different — and necessary</div>
+      <div class="vs">
+        <div class="col bad" data-h="bad">
+          <div class="colTitle">Existing shields <span style="color:var(--faint);font-weight:600;font-size:22px">(e.g. ScamShield)</span></div>
+          <div class="row"><span class="ic yes">✓</span> Detect suspicious transaction</div>
+          <div class="row"><span class="ic yes">✓</span> Report &amp; block</div>
+          <div class="row"><span class="ic no">✕</span> Real-time intervention</div>
+          <div class="row"><span class="ic no">✕</span> Family escalation</div>
+          <div class="row"><span class="ic no">✕</span> Fund-recovery orchestration</div>
+        </div>
+        <div class="vsBadge" data-h="vs">VS</div>
+        <div class="col good" data-h="good">
+          <div class="colTitle cyan">HyperGuard</div>
+          <div class="row"><span class="ic yes">✓</span> Detect <span style="color:var(--faint)">+ behavioral baseline</span></div>
+          <div class="row"><span class="ic yes">✓</span> <b>Live voice intervention</b></div>
+          <div class="row"><span class="ic yes">✓</span> Real-time scam education</div>
+          <div class="row"><span class="ic yes">✓</span> Trusted-family escalation</div>
+          <div class="row"><span class="ic yes">✓</span> Evidence &amp; recovery package</div>
+        </div>
+      </div>
+      <div style="margin-top:40px" data-h="stamp"><span class="stamp safe" style="border-color:var(--safe);color:var(--safe)">OWNS THE ENTIRE LOOP</span></div>
+    </div>
+  </section>
+
+  <!-- SWARM -->
+  <section class="scene" id="s_swarm" data-scene="swarm">
+    <div style="position:absolute;left:50%;top:9%;transform:translateX(-50%);text-align:center" data-h="head">
+      <div class="kicker">The Swarm</div>
+      <div class="h2" style="font-size:60px;margin-top:8px">Five agents, <span class="grad">acting as one</span></div>
+    </div>
+    <div id="swarmField">
+      <svg id="swarmLinks" width="1280" height="840" viewBox="0 0 1280 840" style="position:absolute;inset:0">
+        <g class="svgline" stroke="rgba(120,180,255,.5)" stroke-width="2"></g>
+      </svg>
+      <svg class="core" viewBox="0 0 120 140">
+        <path class="svgline" d="M60 6 L110 28 V74 C110 104 88 124 60 134 C32 124 10 104 10 74 V28 Z" stroke="url(#shieldGrad)" stroke-width="3.5" fill="rgba(201,242,74,.05)"/>
+        <circle cx="60" cy="74" r="33" fill="none" stroke="#79d6e6" stroke-width="1.6" opacity="0.6"/>
+        <circle cx="60" cy="42" r="5" fill="#c9f24a"/><circle cx="93" cy="74" r="5" fill="#c9f24a"/>
+        <circle cx="60" cy="106" r="5" fill="#c9f24a"/><circle cx="27" cy="74" r="5" fill="#c9f24a"/>
+        <circle cx="60" cy="74" r="11" fill="#c9f24a"/>
+      </svg>
+      <div class="coreLbl mono">LANGGRAPH CORE</div>
+      <!-- agents positioned via JS -->
+      <div class="agent" data-i="0"><div class="card"><div class="ico"></div><div><div class="nm">Digital Twin</div><div class="ds">Scores every transfer vs. your behavioral baseline.</div></div></div></div>
+      <div class="agent" data-i="1"><div class="card"><div class="ico"></div><div><div class="nm">Voice Negotiator</div><div class="ds">Calls the customer live the moment risk spikes.</div></div></div></div>
+      <div class="agent" data-i="2"><div class="card"><div class="ico"></div><div><div class="nm">Educator</div><div class="ds">Names the scam playbook, warns in real time.</div></div></div></div>
+      <div class="agent" data-i="3"><div class="card"><div class="ico"></div><div><div class="nm">Guardian</div><div class="ds">Alerts a pre-authorized trusted contact.</div></div></div></div>
+      <div class="agent" data-i="4"><div class="card"><div class="ico"></div><div><div class="nm">Recovery Coordinator</div><div class="ds">Builds the evidence package to claw money back.</div></div></div></div>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section class="scene" id="s_arch" data-scene="architecture">
+    <div style="position:absolute;left:50%;top:8%;transform:translateX(-50%);text-align:center" data-h="head">
+      <div class="kicker">Architecture</div>
+      <div class="h2" style="font-size:58px;margin-top:8px">A <span class="grad">LangGraph</span> state machine</div>
+    </div>
+    <div id="archField">
+      <svg id="archLinks" width="1640" height="760" viewBox="0 0 1640 760" style="position:absolute;inset:0">
+        <g class="svgline" stroke="rgba(120,180,255,.55)" stroke-width="2.5"></g>
+      </svg>
+      <div class="node" data-n="tx"  style="left:120px;top:300px"><div class="nt">Transaction</div><div class="nd">incoming transfer</div></div>
+      <div class="node" data-n="twin" style="left:420px;top:300px"><div class="nt cyan">Digital Twin</div><div class="nd">risk scoring</div></div>
+      <div class="node" data-n="neg" style="left:760px;top:170px"><div class="nt">Voice Negotiator</div><div class="nd">live call</div></div>
+      <div class="node" data-n="edu" style="left:760px;top:430px"><div class="nt">Educator</div><div class="nd">scam classify</div></div>
+      <div class="node" data-n="grd" style="left:1080px;top:300px"><div class="nt">Guardian</div><div class="nd">family alert</div></div>
+      <div class="node dec" data-n="dec" style="left:1360px;top:300px"><div class="nt amber">DECISION</div><div class="nd">explainable</div></div>
+      <div class="pill ok" data-n="approve" style="left:760px;top:610px">risk &lt; 0.58 → APPROVE (fast path)</div>
+      <div class="pill no" data-n="block" style="left:1530px;top:300px">BLOCK</div>
+      <div id="riskBox">
+        <div class="mono" style="font-size:14px;letter-spacing:.2em;color:var(--muted)">LIVE RISK SCORE</div>
+        <div id="riskNum" class="mono danger">0.00</div>
+        <div id="riskTrack"><div id="riskFill"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STACK -->
+  <section class="scene" id="s_stack" data-scene="stack">
+    <div class="center" style="top:48%;width:1600px">
+      <div class="kicker" data-h="kick">Built for real time</div>
+      <div class="h2" style="font-size:60px;margin-top:8px" data-h="title">The Tech Stack</div>
+      <div class="stackGrid">
+        <div class="layer"><div class="layerName">Frontend</div><div class="chips">
+          <span class="chip"><i class="dot" style="color:#22e5ff"></i>Next.js</span>
+          <span class="chip"><i class="dot" style="color:#22e5ff"></i>TypeScript</span>
+          <span class="chip"><i class="dot" style="color:#22e5ff"></i>Tailwind</span>
+          <span class="chip"><i class="dot" style="color:#22e5ff"></i>React-Three-Fiber</span>
+        </div></div>
+        <div class="layer"><div class="layerName">Backend · AI</div><div class="chips">
+          <span class="chip"><i class="dot" style="color:#2ee6a6"></i>FastAPI</span>
+          <span class="chip"><i class="dot" style="color:#2ee6a6"></i>LangGraph</span>
+          <span class="chip"><i class="dot" style="color:#2ee6a6"></i>GPT-5.5</span>
+        </div></div>
+        <div class="layer"><div class="layerName">Voice</div><div class="chips">
+          <span class="chip"><i class="dot" style="color:#ffc24d"></i>Twilio</span>
+          <span class="chip"><i class="dot" style="color:#ffc24d"></i>ElevenLabs</span>
+        </div></div>
+        <div class="layer"><div class="layerName">Data · Bus</div><div class="chips">
+          <span class="chip"><i class="dot" style="color:#8b7bff"></i>Supabase + pgvector</span>
+          <span class="chip"><i class="dot" style="color:#8b7bff"></i>Redis Streams</span>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLOSE -->
+  <section class="scene" id="s_close" data-scene="close">
+    <div class="center">
+      <svg id="closeMark" viewBox="0 0 120 140">
+        <path class="svgline shieldPath" d="M60 6 L110 28 V74 C110 104 88 124 60 134 C32 124 10 104 10 74 V28 Z" stroke="url(#shieldGrad)" stroke-width="3.5" fill="rgba(201,242,74,0.05)"/>
+        <circle class="hgRing" cx="60" cy="74" r="34" fill="none" stroke="#79d6e6" stroke-width="1.6" opacity="0.6"/>
+        <circle class="hgSat" cx="60" cy="40" r="5" fill="#c9f24a"/>
+        <circle class="hgSat" cx="94" cy="74" r="5" fill="#c9f24a"/>
+        <circle class="hgSat" cx="60" cy="108" r="5" fill="#c9f24a"/>
+        <circle class="hgSat" cx="26" cy="74" r="5" fill="#c9f24a"/>
+        <circle class="hgCore" cx="60" cy="74" r="11" fill="#c9f24a"/>
+      </svg>
+      <div class="h2" data-h="l1">Detection tells you <span class="danger">after</span>.</div>
+      <div class="h2" style="margin-top:10px" data-h="l2">HyperGuard intervenes <span class="cyan">during</span> — and recovers <span class="safe">after</span>.</div>
+      <div class="sub" style="margin-top:34px;font-size:30px" data-h="l3">An AI agent in the room, when it matters most.</div>
+      <div class="closeUrl mono" style="margin-top:46px" data-h="url">🛡  HYPERGUARD</div>
+    </div>
+  </section>
+
+  <!-- ============ CHROME (on top) ============ -->
+  <div id="chrome">
+    <div id="progTrack"><div id="progFill"></div></div>
+    <span class="bracket tl"></span><span class="bracket tr"></span>
+    <span class="bracket bl"></span><span class="bracket br"></span>
+    <div id="hudTop">
+      <svg id="hudMark" viewBox="0 0 120 140"><path class="svgline" d="M60 6 L110 28 V74 C110 104 88 124 60 134 C32 124 10 104 10 74 V28 Z" stroke="#e9ebf2" stroke-width="5" fill="rgba(201,242,74,0.05)"/><circle cx="60" cy="74" r="31" fill="none" stroke="#5c6378" stroke-width="3"/><circle cx="60" cy="44" r="6" fill="#c9f24a"/><circle cx="90" cy="74" r="6" fill="#c9f24a"/><circle cx="60" cy="104" r="6" fill="#c9f24a"/><circle cx="30" cy="74" r="6" fill="#c9f24a"/><circle cx="60" cy="74" r="12" fill="#c9f24a"/></svg>
+      <div id="hudWord">HYPER<b>GUARD</b></div>
+    </div>
+    <div id="hudRight"><div id="hudIdx" class="mono">01 / 08</div><div id="hudScene" class="mono">COLD OPEN</div></div>
+    <div id="hudFoot" class="mono">AUTONOMOUS FRAUD-INTERVENTION SWARM · <b>REAL-TIME</b></div>
+  </div>
+
+  <div id="vignette"></div>
+</div>
+
+<style>
+  .vchip{font-size:26px;font-weight:700;padding:12px 24px;border-radius:999px;
+    background:rgba(201,242,74,.09);border:1px solid rgba(201,242,74,.32);color:var(--cyan2);opacity:0}
+</style>
+
+<script>
+/* ===================================================================
+   HyperGuard composition — a single seekable GSAP master timeline.
+   render.mjs injects window.__TIMELINE__ before this runs.
+   =================================================================== */
+const CFG = window.__TIMELINE__ || {
+  fps:30,total:30,
+  scenes:[ /* fallback preview: even split */ ]
+};
+
+/* ---------- agent icons (inline SVG, drawn as strings) ---------- */
+const ICONS = [
+  // Digital Twin — radar/target
+  `<svg viewBox="0 0 46 46" fill="none" stroke="#79d6e6" stroke-width="2.4" class="svgline">
+     <circle cx="23" cy="23" r="18"/><circle cx="23" cy="23" r="10"/><circle cx="23" cy="23" r="2.6" fill="#c9f24a" stroke="none"/>
+     <path d="M23 5 V14 M23 32 V41 M5 23 H14 M32 23 H41"/></svg>`,
+  // Voice Negotiator — phone + waves
+  `<svg viewBox="0 0 46 46" fill="none" stroke="#79d6e6" stroke-width="2.4" class="svgline">
+     <path d="M15 11c-3 0-5 2-5 5 0 11 9 20 20 20 3 0 5-2 5-5 0-1-1-2-2-3l-5-2c-1 0-2 0-3 1l-1 2c-4-2-7-5-9-9l2-1c1-1 1-2 1-3l-2-5c-1-1-2-2-3-2z"/>
+     <path d="M33 12c2 2 3 5 3 8 M30 16c1 1 1.6 2.6 1.6 4" stroke="#c9f24a"/></svg>`,
+  // Educator — speech + alert
+  `<svg viewBox="0 0 46 46" fill="none" stroke="#79d6e6" stroke-width="2.4" class="svgline">
+     <path d="M8 12h30v20H22l-8 7v-7H8z"/><path d="M23 17v7" stroke="#ffc24b"/><circle cx="23" cy="28" r="1.4" fill="#ffc24b" stroke="none"/></svg>`,
+  // Guardian — family/two people
+  `<svg viewBox="0 0 46 46" fill="none" stroke="#c9f24a" stroke-width="2.4" class="svgline">
+     <circle cx="16" cy="16" r="5"/><circle cx="31" cy="18" r="4"/>
+     <path d="M7 37c0-6 4-10 9-10s9 4 9 10 M27 37c0-5 3-8 7-8"/></svg>`,
+  // Recovery — document + check
+  `<svg viewBox="0 0 46 46" fill="none" stroke="#79d6e6" stroke-width="2.4" class="svgline">
+     <path d="M13 7h13l8 8v24H13z"/><path d="M26 7v8h8"/><path d="M18 27l4 4 7-8" stroke="#c9f24a"/></svg>`
+];
+document.querySelectorAll('.agent').forEach((a,i)=>{ a.querySelector('.ico').innerHTML = ICONS[i]; });
+
+/* ---------- particle field (deterministic fn of time) ---------- */
+const PARTS=[]; const pl=document.getElementById('particles');
+function rnd(seed){let x=Math.sin(seed*99.13)*43758.5453;return x-Math.floor(x);}
+for(let i=0;i<70;i++){
+  const d=document.createElement('div');d.className='pt';
+  const bx=rnd(i+1)*1920, by=rnd(i+7)*1080, sc=.5+rnd(i+3)*2.2;
+  const amp=20+rnd(i+5)*70, spd=.15+rnd(i+9)*.5, ph=rnd(i+11)*6.28, drift=(rnd(i+13)-.5)*40;
+  d.style.opacity=(.15+rnd(i+17)*.5); d.style.transform=`translate(${bx}px,${by}px) scale(${sc})`;
+  pl.appendChild(d); PARTS.push({d,bx,by,sc,amp,spd,ph,drift});
+}
+function moveParticles(t){
+  for(const p of PARTS){
+    const y=p.by+Math.sin(t*p.spd+p.ph)*p.amp;
+    const x=p.bx+Math.cos(t*p.spd*.7+p.ph)*p.drift;
+    p.d.style.transform=`translate(${x}px,${y}px) scale(${p.sc})`;
+  }
+}
+
+/* ---------- helpers ---------- */
+function drawOn(tl,sel,dur,pos,from){ // animate stroke draw-in
+  const el=typeof sel==='string'?document.querySelector(sel):sel;
+  if(!el) return;
+  const len=el.getTotalLength?el.getTotalLength():400;
+  gsap.set(el,{strokeDasharray:len,strokeDashoffset:len});
+  tl.to(el,{strokeDashoffset:0,duration:dur,ease:'power2.inOut'},pos);
+}
+function H(scene,name){return scene.querySelector(`[data-h="${name}"]`);}
+
+/* ---------- swarm geometry: shield core + 5 agents in a ring ---------- */
+(function layoutSwarm(){
+  const cx=640, cy=420, R=270;
+  const agents=document.querySelectorAll('#s_swarm .agent');
+  const linkG=document.querySelector('#swarmLinks g');
+  const angles=[-90,-18,54,126,198].map(a=>a*Math.PI/180);
+  agents.forEach((a,i)=>{
+    const x=cx+Math.cos(angles[i])*R*1.55, y=cy+Math.sin(angles[i])*R;
+    a.style.left=x+'px'; a.style.top=y+'px';
+    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d',`M${cx} ${cy} L${x} ${y}`); p.setAttribute('class','swarmEdge svgline');
+    linkG.appendChild(p);
+  });
+})();
+
+/* ---------- architecture edges ---------- */
+(function archEdges(){
+  const g=document.querySelector('#archLinks g');
+  const E=[ 'M210 330 H400', 'M540 330 H740', 'M820 330 L820 210', 'M820 330 L820 410',
+            'M820 210 H880 V330', 'M820 430 V470 M760 470 H880', // simplified
+            'M900 330 H1060', 'M1200 330 H1340', 'M1480 330 H1520',
+            'M540 360 C600 560 700 600 740 612' ];
+  E.forEach(d=>{const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',d);p.setAttribute('class','archEdge svgline');g.appendChild(p);});
+})();
+
+/* ===================================================================
+   CAPTIONS — build DOM from CFG, return per-scene element arrays
+   =================================================================== */
+const capWrap=document.getElementById('capWrap')||(()=>{const w=document.createElement('div');w.id='capWrap';document.getElementById('stage').appendChild(w);return w;})();
+function buildCaptions(scene){
+  const els=(scene.captions||[]).map(txt=>{
+    const d=document.createElement('div');d.className='cap';d.innerHTML=txt;capWrap.appendChild(d);return d;
+  });
+  return els;
+}
+function captionTimeline(tl,els,dur){
+  if(!els.length) return;
+  const slot=dur/els.length;
+  els.forEach((el,i)=>{
+    const t0=i*slot;
+    tl.fromTo(el,{autoAlpha:0,y:14},{autoAlpha:1,y:0,duration:.34,ease:'power2.out'},t0+.06);
+    if(i<els.length-1) tl.to(el,{autoAlpha:0,y:-10,duration:.28,ease:'power2.in'},t0+slot-.16);
+  });
+}
+
+/* ===================================================================
+   PER-SCENE BUILDERS  (build:: id -> function(tl, sceneEl, dur))
+   =================================================================== */
+const BUILD={
+  hook(tl,s,d){
+    tl.fromTo(H(s,'clock'),{autoAlpha:0,scale:.85},{autoAlpha:1,scale:1,duration:.7,ease:'back.out(1.5)'},.2);
+    document.querySelectorAll('#s_hook .ringWave').forEach((w,i)=>{
+      tl.fromTo(w,{scale:.3,autoAlpha:.7},{scale:2.4,autoAlpha:0,duration:1.6,ease:'power1.out'},.3+i*.45);
+      tl.fromTo(w,{scale:.3,autoAlpha:.6},{scale:2.4,autoAlpha:0,duration:1.6,ease:'power1.out'},d*.5+i*.45);
+    });
+    tl.fromTo('#s_hook .ringIcon',{autoAlpha:0,scale:.7,rotate:-8},{autoAlpha:1,scale:1,rotate:0,duration:.6,ease:'back.out(2)'},.25);
+    tl.to('#s_hook .ringIcon',{x:'+=4',duration:.06,repeat:14,yoyo:true,ease:'none'},.9); // shake
+    tl.fromTo(H(s,'chip'),{autoAlpha:0,y:26},{autoAlpha:1,y:0,duration:.6},1.0);
+    tl.fromTo(H(s,'line'),{autoAlpha:0},{autoAlpha:1,duration:.6},1.6);
+  },
+  problem(tl,s,d){
+    tl.fromTo(H(s,'kick'),{autoAlpha:0,y:16},{autoAlpha:1,y:0,duration:.5},.2);
+    tl.fromTo(H(s,'title'),{autoAlpha:0,y:20},{autoAlpha:1,y:0,duration:.6},.4);
+    tl.fromTo('#s_problem .tlbar',{autoAlpha:0},{autoAlpha:1,duration:.4},.9);
+    tl.to('#s_problem .tlfill',{scaleX:1,duration:2.4,ease:'power1.inOut'},1.0);
+    const mk=document.querySelectorAll('#s_problem .tlmark'), lb=document.querySelectorAll('#s_problem .tllbl');
+    [0,1,2].forEach(i=>{
+      tl.fromTo(mk[i],{autoAlpha:0,scale:0},{autoAlpha:1,scale:1,duration:.4,ease:'back.out(2)'},1.2+i*.8);
+      tl.fromTo(lb[i],{autoAlpha:0,y:8},{autoAlpha:1,y:0,duration:.4},1.35+i*.8);
+    });
+    tl.fromTo(H(s,'moment'),{autoAlpha:0,scale:.9},{autoAlpha:1,scale:1,duration:.7,ease:'back.out(1.4)'},Math.max(4,d*.55));
+    tl.fromTo(H(s,'sixty'),{autoAlpha:0},{autoAlpha:1,duration:.6},Math.max(4.5,d*.55+.4));
+  },
+  solution(tl,s,d){
+    tl.fromTo('#solMark',{autoAlpha:0,scale:.6,y:10},{autoAlpha:1,scale:1,y:0,duration:.7,ease:'back.out(1.6)'},.2);
+    drawOn(tl,'#solMark .shieldPath',1.1,.3);
+    tl.fromTo('#solMark .hgRing',{autoAlpha:0,scale:.4,transformOrigin:'50% 50%'},{autoAlpha:.6,scale:1,duration:.6,ease:'power2.out'},.95);
+    tl.fromTo('#solMark .hgSat',{autoAlpha:0,scale:0,transformOrigin:'50% 50%'},{autoAlpha:1,scale:1,duration:.4,stagger:.08,ease:'back.out(2.4)'},1.05);
+    tl.fromTo('#solMark .hgCore',{autoAlpha:0,scale:0,transformOrigin:'50% 50%'},{autoAlpha:1,scale:1,duration:.5,ease:'back.out(2)'},1.35);
+    tl.fromTo(H(s,'kick'),{autoAlpha:0,y:14},{autoAlpha:1,y:0,duration:.5},.7);
+    tl.fromTo(H(s,'title'),{autoAlpha:0,y:30,scale:.96},{autoAlpha:1,y:0,scale:1,duration:.8,ease:'power3.out'},.9);
+    tl.fromTo(H(s,'sub'),{autoAlpha:0,y:16},{autoAlpha:1,y:0,duration:.6},1.4);
+    document.querySelectorAll('#s_solution .vchip').forEach((v,i)=>
+      tl.fromTo(v,{autoAlpha:0,y:18,scale:.9},{autoAlpha:1,y:0,scale:1,duration:.45,ease:'back.out(2)'},1.9+i*.18));
+  },
+  different(tl,s,d){
+    tl.fromTo(H(s,'kick'),{autoAlpha:0,y:14},{autoAlpha:1,y:0,duration:.5},.2);
+    tl.fromTo(H(s,'bad'),{autoAlpha:0,x:-40},{autoAlpha:1,x:0,duration:.6,ease:'power3.out'},.5);
+    tl.fromTo(H(s,'good'),{autoAlpha:0,x:40},{autoAlpha:1,x:0,duration:.6,ease:'power3.out'},.7);
+    tl.fromTo(H(s,'vs'),{autoAlpha:0,scale:.4},{autoAlpha:1,scale:1,duration:.5,ease:'back.out(2.2)'},.9);
+    const badRows=document.querySelectorAll('#s_different .bad .row'), goodRows=document.querySelectorAll('#s_different .good .row');
+    badRows.forEach((r,i)=>tl.fromTo(r,{autoAlpha:0,x:-14},{autoAlpha:1,x:0,duration:.34},1.2+i*.22));
+    goodRows.forEach((r,i)=>tl.fromTo(r,{autoAlpha:0,x:14},{autoAlpha:1,x:0,duration:.34},1.35+i*.22));
+    tl.fromTo(H(s,'stamp'),{autoAlpha:0,scale:1.5,rotate:6},{autoAlpha:1,scale:1,rotate:-4,duration:.5,ease:'back.out(1.8)'},Math.max(3.2,d*.74));
+  },
+  swarm(tl,s,d){
+    tl.fromTo(H(s,'head'),{autoAlpha:0,y:-16},{autoAlpha:1,y:0,duration:.6},.2);
+    tl.fromTo('#s_swarm .core',{autoAlpha:0,scale:.5},{autoAlpha:1,scale:1,duration:.7,ease:'back.out(1.6)'},.5);
+    drawOn(tl,'#s_swarm .core path:nth-child(1)',1.0,.6);
+    tl.fromTo('#s_swarm .coreLbl',{autoAlpha:0},{autoAlpha:1,duration:.5},1.1);
+    const edges=document.querySelectorAll('.swarmEdge'), agents=document.querySelectorAll('#s_swarm .agent');
+    agents.forEach((a,i)=>{
+      const t=1.3+i*((d-2.2)/5);
+      drawOn(tl,edges[i],.5,t);
+      tl.fromTo(a,{autoAlpha:0,scale:.8,y:14},{autoAlpha:1,scale:1,y:0,duration:.5,ease:'back.out(1.7)'},t+.25);
+    });
+  },
+  architecture(tl,s,d){
+    tl.fromTo(H(s,'head'),{autoAlpha:0,y:-16},{autoAlpha:1,y:0,duration:.6},.2);
+    const order=['tx','twin','neg','edu','grd','dec'];
+    const edges=document.querySelectorAll('.archEdge');
+    edges.forEach((e,i)=>drawOn(tl,e,.45,.7+i*((d-2.6)/edges.length)));
+    order.forEach((n,i)=>{
+      const el=document.querySelector(`#s_arch [data-n="${n}"]`);
+      tl.fromTo(el,{autoAlpha:0,scale:.8,y:10},{autoAlpha:1,scale:1,y:0,duration:.45,ease:'back.out(1.6)'},.6+i*((d-2.6)/6));
+    });
+    tl.fromTo('#riskBox',{autoAlpha:0,x:20},{autoAlpha:1,x:0,duration:.5},1.2);
+    const proxy={v:0};
+    tl.to('#riskFill',{scaleX:.93,duration:1.6,ease:'power2.out'},1.6);
+    tl.to(proxy,{v:.93,duration:1.6,ease:'power2.out',onUpdate(){document.getElementById('riskNum').textContent=proxy.v.toFixed(2);}},1.6);
+    tl.fromTo('#s_arch [data-n="approve"]',{autoAlpha:0,y:10},{autoAlpha:1,y:0,duration:.45},Math.max(3,d*.55));
+    tl.fromTo('#s_arch [data-n="block"]',{autoAlpha:0,scale:.6},{autoAlpha:1,scale:1,duration:.5,ease:'back.out(2)'},Math.max(4,d*.74));
+    tl.to('#s_arch [data-n="dec"]',{boxShadow:'0 0 50px rgba(255,59,92,.6)',borderColor:'rgba(255,59,92,.7)',duration:.4},Math.max(4,d*.74));
+  },
+  stack(tl,s,d){
+    tl.fromTo(H(s,'kick'),{autoAlpha:0,y:14},{autoAlpha:1,y:0,duration:.5},.2);
+    tl.fromTo(H(s,'title'),{autoAlpha:0,y:20},{autoAlpha:1,y:0,duration:.6},.4);
+    const layers=document.querySelectorAll('#s_stack .layer');
+    layers.forEach((L,li)=>{
+      tl.fromTo(L.querySelector('.layerName'),{autoAlpha:0,x:-16},{autoAlpha:1,x:0,duration:.4},.8+li*.5);
+      L.querySelectorAll('.chip').forEach((c,ci)=>
+        tl.fromTo(c,{autoAlpha:0,y:18,scale:.9},{autoAlpha:1,y:0,scale:1,duration:.4,ease:'back.out(1.8)'},.9+li*.5+ci*.1));
+    });
+  },
+  close(tl,s,d){
+    tl.fromTo('#closeMark',{autoAlpha:0,scale:.6},{autoAlpha:1,scale:1,duration:.8,ease:'back.out(1.6)'},.2);
+    drawOn(tl,'#closeMark .shieldPath',1.1,.3);
+    tl.fromTo('#closeMark .hgRing',{autoAlpha:0,scale:.4,transformOrigin:'50% 50%'},{autoAlpha:.6,scale:1,duration:.6,ease:'power2.out'},.95);
+    tl.fromTo('#closeMark .hgSat',{autoAlpha:0,scale:0,transformOrigin:'50% 50%'},{autoAlpha:1,scale:1,duration:.4,stagger:.08,ease:'back.out(2.4)'},1.05);
+    tl.fromTo('#closeMark .hgCore',{autoAlpha:0,scale:0,transformOrigin:'50% 50%'},{autoAlpha:1,scale:1,duration:.5,ease:'back.out(2)'},1.35);
+    tl.fromTo(H(s,'l1'),{autoAlpha:0,y:20},{autoAlpha:1,y:0,duration:.6},1.0);
+    tl.fromTo(H(s,'l2'),{autoAlpha:0,y:20},{autoAlpha:1,y:0,duration:.7},1.5);
+    tl.fromTo(H(s,'l3'),{autoAlpha:0},{autoAlpha:1,duration:.6},2.4);
+    tl.fromTo(H(s,'url'),{autoAlpha:0,letterSpacing:'1em'},{autoAlpha:1,letterSpacing:'.3em',duration:.9,ease:'power2.out'},3.0);
+    tl.to('#glow',{opacity:.8,duration:1.2},1.0);
+  }
+};
+
+/* ===================================================================
+   ASSEMBLE MASTER TIMELINE
+   =================================================================== */
+const HUD_LABELS={hook:'COLD OPEN',problem:'THE PROBLEM',solution:'THE SOLUTION',different:'DIFFERENTIATION',
+  swarm:'THE SWARM',architecture:'ARCHITECTURE',stack:'TECH STACK',close:'CLOSE'};
+const master=gsap.timeline({paused:true,defaults:{ease:'power3.out'}});
+const allScenes=document.querySelectorAll('.scene');
+gsap.set(allScenes,{autoAlpha:0});
+
+let cursor=0;
+const sceneSpans=[];
+CFG.scenes.forEach((sc)=>{
+  const sceneEl=document.querySelector(`.scene[data-scene="${sc.id}"]`);
+  const dur=sc.dur;
+  const start=sc.start!=null?sc.start:cursor;
+  const tl=gsap.timeline();
+  // fade scene in / out (wrapper)
+  tl.fromTo(sceneEl,{autoAlpha:0},{autoAlpha:1,duration:.5,ease:'power2.out'},0);
+  // content
+  (BUILD[sc.id]||function(){})(tl,sceneEl,dur);
+  // captions
+  const capEls=buildCaptions(sc);
+  const capTl=gsap.timeline();
+  captionTimeline(capTl,capEls,sc.capDur||dur);
+  tl.add(capTl,0);
+  // scene-scoped caption visibility (hide all this scene's caps at scene end)
+  tl.to([sceneEl,...capEls],{autoAlpha:0,duration:.4,ease:'power2.in'},dur-0.4);
+  master.add(tl,start);
+  sceneSpans.push({id:sc.id,start,end:start+dur});
+  cursor=start+dur;
+});
+const TOTAL=CFG.total||cursor;
+// top progress bar across whole video
+master.fromTo('#progFill',{scaleX:0},{scaleX:1,duration:TOTAL,ease:'none'},0);
+
+/* ---------- HUD state (deterministic fn of time) ---------- */
+const idxEl=document.getElementById('hudIdx'), scEl=document.getElementById('hudScene');
+const N=CFG.scenes.length;
+function updateHUD(t){
+  let i=0; for(let k=0;k<sceneSpans.length;k++){ if(t>=sceneSpans[k].start) i=k; }
+  idxEl.textContent=String(i+1).padStart(2,'0')+' / '+String(N).padStart(2,'0');
+  scEl.textContent=HUD_LABELS[sceneSpans[i].id]||'';
+}
+
+/* ===================================================================
+   PUBLIC SEEK API for the renderer
+   =================================================================== */
+window.__duration=TOTAL;
+window.__seek=function(t){
+  const tt=Math.max(0,Math.min(TOTAL,t));
+  master.time(tt);
+  moveParticles(tt);
+  updateHUD(tt);
+};
+window.__seek(0);
+
+/* signal ready once fonts settle */
+(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(()=>{
+  window.__seek(0);
+  window.__ready=true;
+});
+</script>
+</body>
+</html>
