@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Wordmark } from "@/components/brand/Wordmark";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { Panel } from "@/components/primitives/Panel";
 import { CapabilityStrip } from "@/components/console/CapabilityStrip";
 import { ClassificationCard } from "@/components/console/ClassificationCard";
@@ -46,7 +45,6 @@ export default function LiveConsolePage() {
         </div>
         <div className="flex items-center gap-5">
           <CapabilityStrip capabilities={caps} link={link} />
-          <ThemeToggle />
           <Link href="/console" className="readout transition hover:text-ink">
             ← control centre
           </Link>

@@ -6,24 +6,25 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { Wordmark } from "@/components/brand/Wordmark";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { ShieldStage } from "@/components/landing/ShieldStage";
 import { ScrollStory } from "@/components/landing/ScrollStory";
+import { InterceptionFeed } from "@/components/landing/InterceptionFeed";
 
-const TICKER = [
-  "Police impersonation",
-  "Investment scam",
-  "Romance scam",
-  "Job & task scam",
-  "Tech-support scam",
-  "Bank impersonation",
-];
+type Stat = {
+  display: string;
+  label: string;
+  to?: number;
+  to2?: number;
+  prefix?: string;
+  suffix?: string;
+  sep?: string;
+};
 
-const STATS = [
+const STATS: Stat[] = [
   { to: 94, suffix: "%", display: "94%", label: "of fraud losses come from payments the victim authorised themselves" },
   { prefix: "<", to: 60, suffix: "s", display: "<60s", label: "from “I'll send it” to “sent”, HyperGuard's window to intervene" },
   { to: 5, suffix: "", display: "5", label: "AI agents working in concert on every high-risk transfer" },
-  { display: "24/7", label: "always-on interception, with an audit trail for every decision" },
+  { to: 24, to2: 7, sep: "/", display: "24/7", label: "always-on interception, with an audit trail for every decision" },
 ];
 
 if (typeof window !== "undefined") {
@@ -42,6 +43,53 @@ const AGENTS = [
 ];
 
 const FLOW = ["Transaction", "Risk score", "Voice call", "Classify", "Escalate", "Verdict", "Recover"];
+
+// ── Before/after ("the gap") section ───────────────────────────────────────
+const LEGACY_ROWS: { label: string; on: boolean }[] = [
+  { label: "Flags a suspicious transaction", on: true },
+  { label: "Files a report after the fact", on: true },
+  { label: "No real-time intervention", on: false },
+  { label: "No family escalation", on: false },
+  { label: "No recovery orchestration", on: false },
+];
+
+const LIVE_ROWS = [
+  "Live voice negotiation in the moment",
+  "Scam education during the call",
+  "Trusted-contact escalation",
+  "Post-incident evidence & recovery",
+  "Explainable, audited decisions",
+];
+
+function IcoCheck() {
+  return (
+    <svg className="gap-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M3.5 8.6l2.7 2.7L12.5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function IcoCross() {
+  return (
+    <svg className="gap-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M4.6 4.6l6.8 6.8M11.4 4.6l-6.8 6.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IcoDot() {
+  return (
+    <svg className="gap-ico" viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="2.1" fill="currentColor" />
+    </svg>
+  );
+}
+function ShieldNode() {
+  return (
+    <svg className="gap-node-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2.6l7 2.6v5.9c0 4.4-3 8-7 10.3-4-2.3-7-5.9-7-10.3V5.2l7-2.6z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M9 12l2 2 4.2-4.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export default function Landing() {
   const root = useRef<HTMLDivElement>(null);
@@ -71,8 +119,14 @@ export default function Landing() {
       gsap.from(".scale-reveal", { scrollTrigger: { trigger: ".scale", start: "top 80%" }, y: 24, opacity: 0, duration: 0.8, stagger: 0.14 });
 
       // ── The gap: columns slide in ────────────────────────────────────────────
-      gsap.from(".gap-left", { scrollTrigger: { trigger: ".gap", start: "top 78%" }, x: -28, opacity: 0, duration: 0.8 });
-      gsap.from(".gap-right", { scrollTrigger: { trigger: ".gap", start: "top 78%" }, x: 28, opacity: 0, duration: 0.8, delay: 0.1 });
+      // The gap: passive settles, the wire ignites from the node, live caps charge in.
+      const gapTl = gsap.timeline({ scrollTrigger: { trigger: ".gap", start: "top 75%" } });
+      gapTl
+        .from(".gap-passive", { x: -24, opacity: 0, duration: 0.7, ease: "power3.out" })
+        .from(".gap-wire", { scaleY: 0, opacity: 0, duration: 0.55, ease: "power2.out" }, "-=0.15")
+        .from(".gap-node", { scale: 0, opacity: 0, duration: 0.5, ease: "back.out(2)" }, "-=0.2")
+        .from(".gap-live", { x: 24, opacity: 0, duration: 0.7, ease: "power3.out" }, "-=0.4")
+        .from(".gap-live .gap-cap", { x: 14, opacity: 0, duration: 0.5, stagger: 0.08, ease: "power3.out" }, "-=0.35");
 
       // ── The layer: copy + integration nodes ──────────────────────────────────
       gsap.from(".layer-copy", { scrollTrigger: { trigger: ".layer", start: "top 78%" }, y: 24, opacity: 0, duration: 0.8 });
@@ -97,21 +151,33 @@ export default function Landing() {
 
       // ── Stats reveal + count-up ──────────────────────────────────────────────
       gsap.from(".stat", { scrollTrigger: { trigger: ".stats", start: "top 82%" }, y: 26, opacity: 0, duration: 0.7, stagger: 0.12, ease: "power3.out" });
-      gsap.utils.toArray<HTMLElement>(".stat-num").forEach((el) => {
-        const to = parseFloat(el.dataset.to || "");
-        if (!to) return;
-        const prefix = el.dataset.prefix || "";
-        const suffix = el.dataset.suffix || "";
-        const obj = { v: 0 };
-        gsap.to(obj, {
-          v: to,
-          duration: 1.7,
-          ease: "power2.out",
-          scrollTrigger: { trigger: el, start: "top 90%" },
-          onUpdate: () => {
-            el.textContent = prefix + Math.round(obj.v) + suffix;
-          },
+      // One shared tween drives every metric off the same progress value, so all
+      // four start and land on the same frame regardless of magnitude (5, 24/7,
+      // 94 all finish together). Linear ease keeps each one ticking up to the end.
+      const statNums = gsap.utils.toArray<HTMLElement>(".stat-num");
+      const counter = { p: 0 };
+      const renderStats = () => {
+        statNums.forEach((el) => {
+          const to = parseFloat(el.dataset.to || "");
+          if (isNaN(to)) return;
+          const to2 = el.dataset.to2;
+          if (to2 !== undefined) {
+            const sep = el.dataset.sep || "/";
+            el.textContent =
+              Math.round(counter.p * to) + sep + Math.round(counter.p * parseFloat(to2));
+          } else {
+            el.textContent =
+              (el.dataset.prefix || "") + Math.round(counter.p * to) + (el.dataset.suffix || "");
+          }
         });
+      };
+      gsap.to(counter, {
+        p: 1,
+        duration: 1.8,
+        ease: "none",
+        scrollTrigger: { trigger: ".stats", start: "top 82%" },
+        onUpdate: renderStats,
+        onComplete: renderStats,
       });
 
       // ── Pipeline: a pulse travels through the stages ─────────────────────────
@@ -148,7 +214,6 @@ export default function Landing() {
           <a href="#swarm" className="readout hidden transition hover:text-ink sm:inline">
             the swarm
           </a>
-          <ThemeToggle />
           <Link
             href="/console"
             className="rounded-md bg-signal px-4 py-2 font-display text-[0.82rem] font-semibold text-onsignal transition hover:brightness-110"
@@ -214,22 +279,6 @@ export default function Landing() {
         <ShieldStage />
       </section>
 
-      {/* Scam-type marquee */}
-      <div className="relative z-10 overflow-hidden border-y border-hairline bg-abyss/40 py-3">
-        <div className="marquee-track">
-          {[0, 1].map((dup) => (
-            <span key={dup} className="flex shrink-0 items-center">
-              {TICKER.map((t) => (
-                <span key={t} className="readout flex items-center px-7 text-signal/80">
-                  <span className="mr-7 text-faint">◆</span>
-                  {t}
-                </span>
-              ))}
-            </span>
-          ))}
-        </div>
-      </div>
-
       {/* Stats */}
       <section className="stats relative z-10 mx-auto max-w-6xl px-6 py-16">
         <div className="grid grid-cols-2 gap-x-8 gap-y-10 sm:grid-cols-4">
@@ -240,6 +289,8 @@ export default function Landing() {
                 data-to={s.to ?? ""}
                 data-prefix={s.prefix ?? ""}
                 data-suffix={s.suffix ?? ""}
+                data-to2={s.to2 ?? undefined}
+                data-sep={s.sep ?? undefined}
               >
                 {s.display}
               </div>
@@ -248,6 +299,9 @@ export default function Landing() {
           ))}
         </div>
       </section>
+
+      {/* Live interception feed */}
+      <InterceptionFeed />
 
       {/* Scale argument, why it has to be agentic */}
       <section className="scale relative z-10 mx-auto max-w-5xl px-6 py-20">
@@ -259,31 +313,53 @@ export default function Landing() {
         </p>
       </section>
 
-      {/* The gap */}
+      {/* The gap — passive (inert) vs HyperGuard (live), split by a live wire */}
       <section className="gap relative z-10 border-y border-hairline bg-abyss/40">
-        <div className="mx-auto grid max-w-6xl gap-px px-6 sm:grid-cols-2">
-          <div className="gap-left py-10 pr-8">
-            <p className="readout">Existing shields</p>
-            <h3 className="mt-3 font-display text-xl text-muted">Detect &amp; report</h3>
-            <ul className="mt-4 flex flex-col gap-2 text-[0.9rem] text-faint">
-              <li>· Flags a suspicious transaction</li>
-              <li>· Files a report after the fact</li>
-              <li className="line-through decoration-crimson/50">No real-time intervention</li>
-              <li className="line-through decoration-crimson/50">No family escalation</li>
-              <li className="line-through decoration-crimson/50">No recovery orchestration</li>
+        <div className="relative mx-auto grid max-w-6xl items-stretch gap-6 px-6 py-12 md:grid-cols-[1fr_auto_1fr] md:gap-3 md:py-16">
+
+          {/* Passive / archived */}
+          <article className="gap-passive relative rounded-xl border border-hairline p-7">
+            <header className="flex items-center gap-2.5">
+              <span className="gap-dot gap-dot--dead" aria-hidden="true" />
+              <span className="readout text-faint">Passive · after the fact</span>
+            </header>
+            <h3 className="mt-4 font-display text-xl text-muted">Existing shields</h3>
+            <p className="mt-1 text-sm text-faint">Detect &amp; report</p>
+            <ul className="mt-6 flex flex-col gap-3 text-[0.92rem]">
+              {LEGACY_ROWS.map((r) => (
+                <li key={r.label} className={`gap-row ${r.on ? "gap-row--has" : "gap-row--miss"}`}>
+                  {r.on ? <IcoDot /> : <IcoCross />}
+                  <span>{r.label}</span>
+                </li>
+              ))}
             </ul>
+          </article>
+
+          {/* The live wire */}
+          <div className="gap-seam relative hidden md:flex" aria-hidden="true">
+            <span className="gap-wire" />
+            <span className="gap-node">
+              <ShieldNode />
+            </span>
           </div>
-          <div className="gap-right border-t border-hairline py-10 sm:border-l sm:border-t-0 sm:pl-8">
-            <p className="readout text-signal">HyperGuard</p>
-            <h3 className="mt-3 font-display text-xl text-ink">Intervene, educate, recover</h3>
-            <ul className="mt-4 flex flex-col gap-2 text-[0.9rem] text-muted">
-              <li className="text-signal">+ Live voice negotiation in the moment</li>
-              <li className="text-signal">+ Scam education during the call</li>
-              <li className="text-signal">+ Trusted-contact escalation</li>
-              <li className="text-signal">+ Post-incident evidence &amp; recovery</li>
-              <li className="text-signal">+ Explainable, audited decisions</li>
+
+          {/* Live / intervening */}
+          <article className="gap-live relative rounded-xl border p-7">
+            <header className="flex items-center gap-2.5">
+              <span className="gap-dot gap-dot--live" aria-hidden="true" />
+              <span className="readout text-signal">Live · intervening now</span>
+            </header>
+            <h3 className="mt-4 font-display text-xl text-ink">HyperGuard</h3>
+            <p className="mt-1 text-sm text-muted">Intervene, educate, recover</p>
+            <ul className="mt-6 flex flex-col gap-3 text-[0.92rem] text-ink">
+              {LIVE_ROWS.map((label) => (
+                <li key={label} className="gap-cap">
+                  <IcoCheck />
+                  <span>{label}</span>
+                </li>
+              ))}
             </ul>
-          </div>
+          </article>
         </div>
       </section>
 

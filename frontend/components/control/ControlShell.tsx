@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Wordmark } from "@/components/brand/Wordmark";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/format";
 
 export function ControlShell({
@@ -34,7 +33,6 @@ export function ControlShell({
           <Link href="/console/live" className="readout text-faint transition hover:text-ink">
             Live interception
           </Link>
-          <ThemeToggle />
         </nav>
       </header>
 

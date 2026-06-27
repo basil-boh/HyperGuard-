@@ -11,8 +11,15 @@ from app.schemas import Decision, ScamArchetype
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _fast_mode():
-    get_settings().demo_step_delay = 0.0
+def _hermetic():
+    # Keep the suite deterministic and offline: never hit the real LLM, telephony,
+    # interactive-voice webhooks, or Supabase even when a developer .env has live creds.
+    s = get_settings()
+    s.demo_step_delay = 0.0
+    s.force_demo_mode = True
+    s.public_base_url = None
+    s.supabase_url = None
+    s.supabase_service_key = None
 
 
 @pytest.fixture

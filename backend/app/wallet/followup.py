@@ -10,6 +10,7 @@ and persisted to the case.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from app.domain.events import EventType, SwarmEvent
 from app.graph import get_orchestrator
@@ -19,6 +20,10 @@ from app.wallet.registry import get_registry
 from app.wallet.repository import get_repository
 
 logger = logging.getLogger("hyperguard.followup")
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _guardian_message(customer_name: str, transaction: dict, assessment: dict) -> str:
@@ -106,9 +111,20 @@ async def finalize_followup(case_id: str) -> None:
 
     reg.set_followup(case_id, assessment=assessment, escalation=escalation, report=report)
 
+    # Build the call transcript from the synchronously-stored Q&A (the bus-recorded
+    # turns can race finalize), and persist it into the case so the control centre's
+    # case detail shows the conversation — the case row was first written at block
+    # time, before the interview happened.
+    ts = _now_iso()
+    transcript: list[dict] = []
+    for i, qa in enumerate(answers):
+        transcript.append({"index": 2 * i, "speaker": "agent", "text": qa.get("question", ""), "ts": ts, "tags": []})
+        transcript.append({"index": 2 * i + 1, "speaker": "customer", "text": qa.get("answer", ""), "ts": ts, "tags": []})
+
     try:
         await get_repository().update_followup(
-            case_id, context=answers, assessment=assessment, escalation=escalation, report=report
+            case_id, context=answers, assessment=assessment, escalation=escalation,
+            report=report, transcript=transcript,
         )
     except Exception as exc:  # pragma: no cover - persistence best-effort
         logger.warning("persisting follow-up for %s failed: %s", case_id, exc)

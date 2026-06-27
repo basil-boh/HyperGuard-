@@ -19,6 +19,9 @@
     "android": {
       "package": "com.hyperguard.wallet"
     },
-    "plugins": ["expo-router"]
+    "plugins": ["expo-router"],
+    "extra": {
+      "apiBase": "https://hyperguard-production.up.railway.app"
+    }
   }
 }

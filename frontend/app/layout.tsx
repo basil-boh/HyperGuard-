@@ -31,14 +31,6 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
-      <head>
-        {/* Apply the saved theme before paint to avoid a flash. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('hg-theme');if(t){document.documentElement.dataset.theme=t;}}catch(e){}})();`,
-          }}
-        />
-      </head>
       <body className="font-sans antialiased">
         <div className="grid-field" aria-hidden />
         <div className="relative z-10">{children}</div>
