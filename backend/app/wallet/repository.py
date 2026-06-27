@@ -98,7 +98,7 @@ class WalletRepository(ABC):
     async def update_followup(
         self, case_id: str, *, context: list, assessment: dict | None,
         escalation: dict | None, report: str | None, transcript: list | None = None,
-        guardian_alerts: list | None = None,
+        guardian_alerts: list | None = None, classification: dict | None = None,
     ) -> None: ...
 
     # admin aggregates
@@ -153,15 +153,19 @@ class InMemoryRepository(WalletRepository):
         # Balance + ledger already mutated on the live Account; just record the case.
         self._bank.cases[case.case_id] = case
 
-    async def update_followup(self, case_id, *, context, assessment, escalation, report, transcript=None, guardian_alerts=None) -> None:
+    async def update_followup(self, case_id, *, context, assessment, escalation, report, transcript=None, guardian_alerts=None, classification=None) -> None:
         # Follow-up lives in the registry bucket for the live poll; also fold the call
-        # transcript + guardian alerts into the stored case so the control centre shows them.
+        # transcript + guardian alerts + classification into the stored case so the
+        # control centre shows them.
         case = self._bank.cases.get(case_id)
         if case is not None:
             if transcript:
                 case.transcript = transcript
             if guardian_alerts:
                 case.guardian_alerts = guardian_alerts
+            if classification:
+                case.classification = classification
+                case.scam_type = classification.get("archetype")
         return None
 
     async def load_bank(self) -> Bank:
@@ -329,7 +333,7 @@ class SupabaseRepository(WalletRepository):
 
         await asyncio.to_thread(_w)
 
-    async def update_followup(self, case_id, *, context, assessment, escalation, report, transcript=None, guardian_alerts=None) -> None:
+    async def update_followup(self, case_id, *, context, assessment, escalation, report, transcript=None, guardian_alerts=None, classification=None) -> None:
         # Core columns that exist in the base schema — the control centre renders these,
         # so they must persist even if the optional follow-up columns weren't migrated.
         core: dict = {}
@@ -337,6 +341,9 @@ class SupabaseRepository(WalletRepository):
             core["transcript"] = transcript
         if guardian_alerts:
             core["guardian_alerts"] = guardian_alerts
+        if classification:
+            core["classification"] = classification
+            core["scam_type"] = classification.get("archetype")
         # Richer follow-up columns (require the ALTER migration); best-effort.
         extra = {
             "context": context, "assessment": assessment,

@@ -47,8 +47,27 @@ async def finalize_followup(case_id: str) -> None:
     customer_d = bucket.get("customer") or {}
     txn_d = bucket.get("transaction") or {}
     risk_d = bucket.get("risk") or {}
-    classification_d = bucket.get("classification")
     answers = bucket.get("context") or []
+
+    # ── Educator ──────────────────────────────────────────────────────────────────
+    # On the interactive path the graph skipped the educator, so run it here over the
+    # customer's real answers: classify the scam + build the debrief, and emit the
+    # agent engaged/completed events so it lights up in the relay.
+    await rt.bus.publish(SwarmEvent(type=EventType.agent_engaged, case_id=case_id, agent="educator"))
+    customer_speech = " ".join((a.get("answer") or "") for a in answers)
+    classification = rt.taxonomy.classify(customer_speech)
+    classification_d = classification.model_dump(mode="json")
+    is_scam = classification.archetype.value not in ("none", "unknown")
+    await rt.bus.publish(
+        SwarmEvent(
+            type=EventType.scam_classified, case_id=case_id, agent="educator",
+            payload={
+                "classification": classification_d,
+                "verification": "coerced" if is_scam else "unknown",
+            },
+        )
+    )
+    await rt.bus.publish(SwarmEvent(type=EventType.agent_completed, case_id=case_id, agent="educator"))
 
     assessment = await assess(
         rt.llm, transaction=txn_d, risk=risk_d, classification=classification_d, answers=answers
@@ -65,6 +84,8 @@ async def finalize_followup(case_id: str) -> None:
     report: str | None = None
 
     if escalate:
+        # ── Guardian ──────────────────────────────────────────────────────────────
+        await rt.bus.publish(SwarmEvent(type=EventType.agent_engaged, case_id=case_id, agent="guardian"))
         customer = None
         try:
             customer = CustomerProfile(**customer_d)
@@ -86,7 +107,10 @@ async def finalize_followup(case_id: str) -> None:
                         payload={"alert": payload},
                     )
                 )
+        await rt.bus.publish(SwarmEvent(type=EventType.agent_completed, case_id=case_id, agent="guardian"))
 
+        # ── Recovery coordinator ──────────────────────────────────────────────────
+        await rt.bus.publish(SwarmEvent(type=EventType.agent_engaged, case_id=case_id, agent="recovery_coordinator"))
         report = await incident_report(
             rt.llm, case_id=case_id, customer=customer_d, transaction=txn_d,
             risk=risk_d, answers=answers, assessment=assessment,
@@ -108,6 +132,7 @@ async def finalize_followup(case_id: str) -> None:
                 payload={"escalation": escalation, "report": report},
             )
         )
+        await rt.bus.publish(SwarmEvent(type=EventType.agent_completed, case_id=case_id, agent="recovery_coordinator"))
 
     reg.set_followup(case_id, assessment=assessment, escalation=escalation, report=report)
 
@@ -125,6 +150,7 @@ async def finalize_followup(case_id: str) -> None:
         await get_repository().update_followup(
             case_id, context=answers, assessment=assessment, escalation=escalation,
             report=report, transcript=transcript, guardian_alerts=guardian_alerts,
+            classification=classification_d,
         )
     except Exception as exc:  # pragma: no cover - persistence best-effort
         logger.warning("persisting follow-up for %s failed: %s", case_id, exc)
