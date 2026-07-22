@@ -7,9 +7,10 @@ so a console subscribes first and then triggers a run.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.api.auth import require_admin
 from app.config import get_settings
 from app.data.seed_data import build_scenario, get_customer, list_scenarios
 from app.graph import get_orchestrator
@@ -46,7 +47,12 @@ async def customer(customer_id: str) -> dict:
     return profile.model_dump(mode="json")
 
 
-@router.post("/interventions/run", response_model=InterventionOutcome)
+# Launching an intervention is an operator command, so it shares the admin guard.
+@router.post(
+    "/interventions/run",
+    response_model=InterventionOutcome,
+    dependencies=[Depends(require_admin)],
+)
 async def run_intervention(req: RunRequest) -> InterventionOutcome:
     try:
         customer_profile, txn = build_scenario(req.scenario_id)

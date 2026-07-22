@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, routes, twilio_voice, users, wallet, ws
+from app.api import admin, auth, routes, twilio_voice, users, wallet, ws
 from app.config import get_settings
 from app.integrations.event_bus import get_event_bus
 from app.wallet.registry import get_registry
@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.include_router(auth.router)
     app.include_router(routes.router)
     app.include_router(wallet.router)
     app.include_router(users.router)

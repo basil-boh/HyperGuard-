@@ -1,11 +1,16 @@
 // Control-centre API client (the bank's view over the protection layer).
 
+import { authHeaders, redirectToLogin } from "@/lib/auth";
 import type { ScamClassification } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store", headers: authHeaders() });
+  if (res.status === 401) {
+    redirectToLogin();
+    throw new Error("operator login required");
+  }
   if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
   return res.json();
 }
