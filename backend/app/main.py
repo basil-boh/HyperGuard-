@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import admin, routes, twilio_voice, users, wallet, ws
 from app.config import get_settings
 from app.integrations.event_bus import get_event_bus
+from app.integrations.push import get_push_dispatcher
 from app.wallet.registry import get_registry
 from app.wallet.repository import get_repository
 from app.wallet.seed_supabase import ensure_seeded
@@ -33,6 +34,8 @@ async def lifespan(app: FastAPI):
     await bus.connect()
     registry = get_registry()
     await registry.start()
+    push = get_push_dispatcher()
+    await push.start()
     if settings.persistence_enabled:
         await ensure_seeded(get_repository())
     logger.info(
@@ -40,6 +43,7 @@ async def lifespan(app: FastAPI):
         ", ".join(f"{k}={v}" for k, v in settings.capability_report().items()),
     )
     yield
+    await push.stop()
     await registry.stop()
     await bus.close()
 

@@ -30,6 +30,8 @@ class EventType(str, Enum):
     # filed incident report.
     assessment_ready = "assessment.ready"
     report_filed = "report.filed"
+    # A guardian acted on a case from their own device (release / keep blocked).
+    guardian_action = "guardian.action"
     case_closed = "case.closed"
 
 

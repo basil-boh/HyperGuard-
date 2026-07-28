@@ -9,7 +9,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.api.deps import repository
+from app.api.deps import current_user_id, repository
+from app.integrations.push import register_token
 from app.wallet.repository import WalletRepository
 
 router = APIRouter(prefix="/api/users")
@@ -41,6 +42,20 @@ async def create_user(
         home_country=body.home_country,
         initial_balance=body.initial_balance,
     )
+
+
+class PushToken(BaseModel):
+    token: str = Field(min_length=8)
+
+
+@router.post("/push-token")
+async def push_token(
+    body: PushToken, user_id: str = Depends(current_user_id)
+) -> dict:
+    """Bind this device's Expo push token to the active profile so HyperGuard can
+    reach the user (or their guardians) when the app is backgrounded."""
+    devices = register_token(user_id, body.token)
+    return {"user_id": user_id, "devices": devices}
 
 
 @router.get("/{user_id}")

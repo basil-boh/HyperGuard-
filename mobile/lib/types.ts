@@ -88,13 +88,28 @@ export interface Escalation {
   reasons: string[];
 }
 
+export interface GuardianCase {
+  case_id: string;
+  ward_id: string;
+  ward_name: string;
+  active: boolean;
+  created_at: string | null;
+  amount: number | null;
+  currency: string;
+  payee_name: string | null;
+  decision: string | null;
+  status: string;
+  risk_score: number | null;
+  scam_title: string | null;
+}
+
 export interface InterventionPoll {
   case_id: string;
   events: SwarmEvent[];
   outcome: any | null;
   done: boolean;
   followup_pending: boolean;
-  balance: number;
+  balance: number | null;
   context: ContextQA[];
   assessment: Assessment | null;
   escalation: Escalation | null;
