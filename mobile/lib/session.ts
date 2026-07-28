@@ -2,10 +2,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /**
  * The selected user. There is no password — on first launch the user picks or
- * creates a profile, and the choice is persisted on the device. Its id is sent as
- * the `X-User-Id` header on every API call (see lib/api.ts).
+ * creates a profile, and the choice is persisted on the device. When the backend
+ * has SESSION_SECRET configured, selection also mints a signed session token that
+ * is sent as `Authorization: Bearer …`; the legacy `X-User-Id` header is kept for
+ * older backends (see lib/api.ts).
  */
-export type SessionUser = { id: string; name: string };
+export type SessionUser = { id: string; name: string; token?: string | null };
 
 const KEY = "hg.user";
 let cache: SessionUser | null = null;
@@ -38,4 +40,9 @@ export async function clearUser(): Promise<void> {
 export async function getUserId(): Promise<string | null> {
   const user = await loadUser();
   return user?.id ?? null;
+}
+
+export async function getToken(): Promise<string | null> {
+  const user = await loadUser();
+  return user?.token ?? null;
 }

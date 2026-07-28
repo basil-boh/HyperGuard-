@@ -1,3 +1,4 @@
+import { getAdminKey } from "./admin";
 import type { InterventionOutcome, Scenario } from "./types";
 
 // Requests go through the Next rewrite proxy (`/api/*` → backend) by default, so
@@ -40,9 +41,15 @@ export async function runIntervention(scenarioId: string): Promise<InterventionO
 }
 
 export function wsURL(): string {
-  if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
-  if (typeof window === "undefined") return "";
-  const proto = window.location.protocol === "https:" ? "wss" : "ws";
-  // Default to the backend's dev port; the WS isn't covered by the http rewrite.
-  return `${proto}://${window.location.hostname}:8000/ws/events`;
+  let url = process.env.NEXT_PUBLIC_WS_URL ?? "";
+  if (!url) {
+    if (typeof window === "undefined") return "";
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    // Default to the backend's dev port; the WS isn't covered by the http rewrite.
+    url = `${proto}://${window.location.hostname}:8000/ws/events`;
+  }
+  // The event stream is guarded like the admin API; pass the key on the handshake.
+  const key = getAdminKey();
+  if (key) url += `${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(key)}`;
+  return url;
 }

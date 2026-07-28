@@ -3,9 +3,36 @@
 import type { ScamClassification } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+const ADMIN_KEY_STORAGE = "hg_admin_key";
+
+// The backend guards /api/admin/* and /ws/events with ADMIN_API_KEY. The console
+// takes the key from NEXT_PUBLIC_ADMIN_KEY at build time, or from
+// localStorage["hg_admin_key"] so an operator can paste it in the browser.
+export function getAdminKey(): string {
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem(ADMIN_KEY_STORAGE);
+    if (stored) return stored;
+  }
+  return process.env.NEXT_PUBLIC_ADMIN_KEY ?? "";
+}
+
+export function setAdminKey(key: string): void {
+  if (typeof window === "undefined") return;
+  if (key) window.localStorage.setItem(ADMIN_KEY_STORAGE, key);
+  else window.localStorage.removeItem(ADMIN_KEY_STORAGE);
+}
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+  const key = getAdminKey();
+  const res = await fetch(`${API_BASE}${path}`, {
+    cache: "no-store",
+    headers: key ? { "X-Admin-Key": key } : {},
+  });
+  if (res.status === 401) {
+    throw new Error(
+      `GET ${path} → 401 (admin key missing/incorrect — set it with localStorage.hg_admin_key or NEXT_PUBLIC_ADMIN_KEY)`,
+    );
+  }
   if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
   return res.json();
 }

@@ -39,6 +39,15 @@ async def lifespan(app: FastAPI):
         "HyperGuard online, capabilities: %s",
         ", ".join(f"{k}={v}" for k, v in settings.capability_report().items()),
     )
+    if not settings.admin_auth_enabled:
+        logger.warning(
+            "SECURITY: ADMIN_API_KEY unset — admin API + event stream are %s",
+            "disabled" if settings.is_production else "open (development)",
+        )
+    if not settings.user_auth_enabled:
+        logger.warning(
+            "SECURITY: SESSION_SECRET unset — client-supplied X-User-Id is trusted"
+        )
     yield
     await registry.stop()
     await bus.close()

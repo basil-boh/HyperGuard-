@@ -46,7 +46,8 @@ export default function SelectUser() {
   }, []);
 
   const choose = async (u: UserProfile) => {
-    await setUser({ id: u.id, name: u.name });
+    const session = await api.createSession(u.id).catch(() => null);
+    await setUser({ id: u.id, name: u.name, token: session?.token ?? null });
     router.replace("/(tabs)");
   };
 
@@ -59,7 +60,8 @@ export default function SelectUser() {
         phone: phone.trim(),
         age: age ? parseInt(age, 10) : undefined,
       });
-      await setUser({ id: u.id, name: u.name });
+      const session = await api.createSession(u.id).catch(() => null);
+      await setUser({ id: u.id, name: u.name, token: session?.token ?? null });
       router.replace("/(tabs)");
     } catch (e: any) {
       Alert.alert("Couldn't create profile", e?.message ?? "Try again.");
