@@ -16,6 +16,7 @@ from app.schemas import (
     TransactionStatus,
     VerificationStatus,
 )
+from app.services.overrides import CaseOverrides, get_override_registry
 from app.state import SwarmState
 
 
@@ -36,7 +37,13 @@ class Arbiter(Agent):
             and classification.confidence >= 0.6
         )
 
-        if risk.score < settings.intervention_threshold:
+        # Operator overrides trump the automated adjudication.
+        overrides = get_override_registry().peek(case_id)
+        if overrides and overrides.frozen:
+            decision = Decision.block
+        elif overrides and overrides.handoff:
+            decision = Decision.hold
+        elif risk.score < settings.intervention_threshold:
             decision = Decision.approve
         elif verification == VerificationStatus.verified and risk.score < settings.hard_block_threshold:
             decision = Decision.approve
@@ -47,10 +54,13 @@ class Arbiter(Agent):
         else:
             decision = Decision.block  # inconclusive on a high-risk transfer → protect first
 
-        txn.status = (
-            TransactionStatus.approved if decision == Decision.approve else TransactionStatus.blocked
-        )
-        narrative = self._narrative(state, decision, is_scam)
+        if decision == Decision.approve:
+            txn.status = TransactionStatus.approved
+        elif decision == Decision.hold:
+            txn.status = TransactionStatus.intervening  # parked until a human reviews it
+        else:
+            txn.status = TransactionStatus.blocked
+        narrative = self._narrative(state, decision, is_scam, overrides)
 
         await self.emit(
             case_id,
@@ -64,13 +74,32 @@ class Arbiter(Agent):
         return {"decision": decision, "narrative": narrative, "transaction": txn}
 
     @staticmethod
-    def _narrative(state: SwarmState, decision: Decision, is_scam: bool) -> str:
+    def _narrative(
+        state: SwarmState,
+        decision: Decision,
+        is_scam: bool,
+        overrides: CaseOverrides | None = None,
+    ) -> str:
         txn = state["transaction"]
         risk = state["risk"]
         classification = state.get("classification")
         alerts = state.get("guardian_alerts", [])
         amount = f"{txn.currency} {txn.amount:,.0f}"
 
+        if overrides and overrides.frozen:
+            operator = overrides.frozen_by or "A console operator"
+            return (
+                f"Blocked by operator override. {operator} froze the {amount} transfer to "
+                f"{txn.payee_name} mid-case; the money never left the account and the case "
+                "evidence was preserved for review."
+            )
+        if decision == Decision.hold and overrides and overrides.handoff:
+            operator = overrides.handoff_by or "A console operator"
+            return (
+                f"Held for human review. {operator} pulled the {amount} transfer to "
+                f"{txn.payee_name} out of automated adjudication; it stays parked until a "
+                "specialist signs off."
+            )
         if decision == Decision.approve and risk.score < 0.58:
             return (
                 f"Approved. The {amount} transfer to {txn.payee_name} matched "

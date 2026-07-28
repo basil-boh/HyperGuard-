@@ -1,12 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { runIntervention, wsURL } from "./api";
 import type {
   AgentKey,
   Decision,
   EvidencePackage,
   GuardianAlert,
+  OperatorInfo,
+  OperatorOverride,
+  OperatorPresence,
+  OverrideAction,
   RiskAssessment,
   ScamClassification,
   SwarmEvent,
@@ -25,6 +29,34 @@ const AGENTS: AgentKey[] = [
   "guardian",
   "recovery_coordinator",
 ];
+
+// Reconnect with exponential backoff + jitter; heartbeat keeps presence fresh
+// and lets the server prune dead consoles.
+const RECONNECT_BASE_MS = 500;
+const RECONNECT_CAP_MS = 15_000;
+const HEARTBEAT_MS = 15_000;
+const SEEN_IDS_CAP = 512;
+
+const CALLSIGNS = ["alpha", "bravo", "cobalt", "delta", "echo", "helix", "nova", "orbit"];
+
+function operatorIdentity(): OperatorInfo {
+  if (typeof window === "undefined") return { id: "ssr", name: "console" };
+  const cached = sessionStorage.getItem("hg:operator");
+  if (cached) {
+    try {
+      return JSON.parse(cached) as OperatorInfo;
+    } catch {
+      /* regenerate below */
+    }
+  }
+  const suffix = Math.floor(Math.random() * 0xffff).toString(16).padStart(4, "0");
+  const identity: OperatorInfo = {
+    id: `op-${suffix}`,
+    name: `${CALLSIGNS[Math.floor(Math.random() * CALLSIGNS.length)]}-${suffix.slice(0, 2)}`,
+  };
+  sessionStorage.setItem("hg:operator", JSON.stringify(identity));
+  return identity;
+}
 
 export interface CaseState {
   caseId: string | null;
@@ -49,6 +81,9 @@ export interface CaseState {
   decision: Decision | null;
   narrative: string | null;
   evidence: EvidencePackage | null;
+  overrides: OperatorOverride[];
+  frozen: boolean;
+  handoff: boolean;
 }
 
 const idleAgents = (): Record<AgentKey, AgentState> =>
@@ -71,6 +106,9 @@ const blank = (): CaseState => ({
   decision: null,
   narrative: null,
   evidence: null,
+  overrides: [],
+  frozen: false,
+  handoff: false,
 });
 
 type Action = { kind: "reset" } | { kind: "arm" } | { kind: "event"; event: SwarmEvent };
@@ -119,6 +157,19 @@ function reduce(state: CaseState, action: Action): CaseState {
       };
     case "guardian.alerted":
       return { ...state, guardianAlerts: [...state.guardianAlerts, ev.payload.alert] };
+    case "operator.override": {
+      const entry: OperatorOverride = {
+        action: ev.payload.action,
+        operator: ev.payload.operator ?? { id: "?", name: "console" },
+        at: ev.at,
+      };
+      return {
+        ...state,
+        overrides: [...state.overrides, entry],
+        frozen: state.frozen || entry.action === "freeze_transfer",
+        handoff: state.handoff || entry.action === "human_handoff",
+      };
+    }
     case "decision.made":
       return { ...state, decision: ev.payload.decision, narrative: ev.payload.narrative };
     case "evidence.built":
@@ -132,49 +183,96 @@ function reduce(state: CaseState, action: Action): CaseState {
 
 export function useSwarmStream() {
   const [state, dispatch] = useReducer(reduce, undefined, blank);
+  const [operators, setOperators] = useState<OperatorPresence[]>([]);
   const linkRef = useRef<Link>("connecting");
   const [, force] = useReducer((x) => x + 1, 0);
   const socketRef = useRef<WebSocket | null>(null);
+  const selfRef = useRef<OperatorInfo | null>(null);
+  const caseRef = useRef<string | null>(null);
+  const lastEventIdRef = useRef<string | null>(null);
+  const seenIdsRef = useRef<{ set: Set<string>; order: string[] }>({ set: new Set(), order: [] });
+  if (selfRef.current === null) selfRef.current = operatorIdentity();
 
   const setLink = (l: Link) => {
     linkRef.current = l;
     force();
   };
 
+  const send = useCallback((frame: Record<string, unknown>) => {
+    const ws = socketRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(frame));
+  }, []);
+
   useEffect(() => {
     let closed = false;
+    let attempts = 0;
     let retry: ReturnType<typeof setTimeout>;
+    let heartbeat: ReturnType<typeof setInterval>;
 
     const connect = () => {
-      const url = wsURL();
-      if (!url) return;
+      const base = wsURL();
+      if (!base) return;
       setLink("connecting");
+      // Resume from the last event we saw so a blip only replays the gap.
+      const since = lastEventIdRef.current;
+      const url = since ? `${base}${base.includes("?") ? "&" : "?"}since=${since}` : base;
       const ws = new WebSocket(url);
       socketRef.current = ws;
 
-      ws.onopen = () => setLink("online");
+      ws.onopen = () => {
+        attempts = 0;
+        setLink("online");
+        send({ op: "hello", operator: selfRef.current, viewing: caseRef.current });
+      };
       ws.onmessage = (msg) => {
+        let frame: any;
         try {
-          dispatch({ kind: "event", event: JSON.parse(msg.data) as SwarmEvent });
+          frame = JSON.parse(msg.data);
         } catch {
-          /* ignore malformed frames */
+          return; // ignore malformed frames
         }
+        if (frame.type === "pong" || frame.type === "override.rejected") return;
+        if (frame.type === "presence.updated") {
+          setOperators(frame.payload?.operators ?? []);
+          return;
+        }
+        const event = frame as SwarmEvent;
+        if (!event.id || !event.type) return;
+        // Dedupe across reconnect replays.
+        const seen = seenIdsRef.current;
+        if (seen.set.has(event.id)) return;
+        seen.set.add(event.id);
+        seen.order.push(event.id);
+        while (seen.order.length > SEEN_IDS_CAP) seen.set.delete(seen.order.shift()!);
+        lastEventIdRef.current = event.id;
+        dispatch({ kind: "event", event });
       };
       ws.onclose = () => {
         if (closed) return;
         setLink("offline");
-        retry = setTimeout(connect, 1500);
+        const delay =
+          Math.min(RECONNECT_CAP_MS, RECONNECT_BASE_MS * 2 ** attempts) + Math.random() * 400;
+        attempts += 1;
+        retry = setTimeout(connect, delay);
       };
       ws.onerror = () => ws.close();
     };
 
     connect();
+    heartbeat = setInterval(() => send({ op: "ping" }), HEARTBEAT_MS);
     return () => {
       closed = true;
       clearTimeout(retry);
+      clearInterval(heartbeat);
       socketRef.current?.close();
     };
-  }, []);
+  }, [send]);
+
+  // Tell the roster which case this console is watching.
+  useEffect(() => {
+    caseRef.current = state.caseId;
+    send({ op: "presence", viewing: state.caseId });
+  }, [state.caseId, send]);
 
   // Persist the freshest evidence so the recovery dossier can render standalone.
   useEffect(() => {
@@ -194,5 +292,21 @@ export function useSwarmStream() {
 
   const reset = useCallback(() => dispatch({ kind: "reset" }), []);
 
-  return { state, link: linkRef.current, launch, reset };
+  const sendOverride = useCallback(
+    (action: OverrideAction) => {
+      if (!caseRef.current) return;
+      send({ op: "override", case_id: caseRef.current, action });
+    },
+    [send],
+  );
+
+  return {
+    state,
+    link: linkRef.current,
+    launch,
+    reset,
+    sendOverride,
+    operators,
+    self: selfRef.current,
+  };
 }

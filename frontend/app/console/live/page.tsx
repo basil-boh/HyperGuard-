@@ -7,6 +7,7 @@ import { Panel } from "@/components/primitives/Panel";
 import { CapabilityStrip } from "@/components/console/CapabilityStrip";
 import { ClassificationCard } from "@/components/console/ClassificationCard";
 import { GuardianCard } from "@/components/console/GuardianCard";
+import { OperatorDeck } from "@/components/console/OperatorDeck";
 import { RelayTrack } from "@/components/console/RelayTrack";
 import { RiskMeter } from "@/components/console/RiskMeter";
 import { ScenarioLauncher } from "@/components/console/ScenarioLauncher";
@@ -19,7 +20,7 @@ import type { Scenario } from "@/lib/types";
 import { useSwarmStream } from "@/lib/useSwarmStream";
 
 export default function LiveConsolePage() {
-  const { state, link, launch } = useSwarmStream();
+  const { state, link, launch, sendOverride, operators, self } = useSwarmStream();
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [bootCaps, setBootCaps] = useState<Record<string, boolean> | null>(null);
 
@@ -58,6 +59,14 @@ export default function LiveConsolePage() {
           </Panel>
           <Panel label="Subject under review" index="◉">
             <SubjectCard state={state} />
+          </Panel>
+          <Panel label="Operator deck" index="⌘" accent="var(--amber)">
+            <OperatorDeck
+              state={state}
+              operators={operators}
+              self={self}
+              onOverride={sendOverride}
+            />
           </Panel>
         </div>
 

@@ -141,6 +141,7 @@ export type EventType =
   | "guardian.alerted"
   | "decision.made"
   | "evidence.built"
+  | "operator.override"
   | "case.closed";
 
 export interface SwarmEvent {
@@ -150,4 +151,24 @@ export interface SwarmEvent {
   agent: AgentKey | "arbiter" | null;
   at: string;
   payload: Record<string, any>;
+}
+
+// ── Operator channel (client → server over the same websocket) ────────────────
+export type OverrideAction = "escalate_guardian" | "freeze_transfer" | "human_handoff";
+
+export interface OperatorInfo {
+  id: string;
+  name: string;
+}
+
+// One row of the presence roster broadcast to every console.
+export interface OperatorPresence extends OperatorInfo {
+  viewing: string | null;
+  since: string;
+}
+
+export interface OperatorOverride {
+  action: OverrideAction;
+  operator: OperatorInfo;
+  at: string;
 }

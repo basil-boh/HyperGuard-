@@ -85,6 +85,17 @@ class EventBus:
             return list(self._replay)
         return [e for e in self._replay if e.case_id == case_id]
 
+    def replay_since(self, last_event_id: str | None) -> list[SwarmEvent]:
+        """Events published after `last_event_id`. Unknown/absent id → full replay,
+        so a reconnecting console can always converge on current state."""
+        events = list(self._replay)
+        if not last_event_id:
+            return events
+        for i, event in enumerate(events):
+            if event.id == last_event_id:
+                return events[i + 1 :]
+        return events
+
     @contextlib.contextmanager
     def subscribe(self):
         sub = Subscription()
