@@ -1,17 +1,29 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar, Button, Card } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useFocusFetch } from "@/lib/useFocusFetch";
-import { color, font } from "@/lib/theme";
-import type { Contact } from "@/lib/types";
+import { color, font, radius } from "@/lib/theme";
+import { money, relativeDay } from "@/lib/format";
+import type { Contact, GuardianCase } from "@/lib/types";
 
 export default function Family() {
   const { data, reload } = useFocusFetch<Contact[]>(api.contacts);
   const contacts = data ?? [];
+  const { data: wardData, reload: reloadWards } = useFocusFetch<GuardianCase[]>(api.guardianCases);
+  const wardCases = (wardData ?? []).slice(0, 6);
+
+  // Keep the ward list fresh while this tab is on screen — an in-flight
+  // intervention should appear here within seconds.
+  useFocusEffect(
+    useCallback(() => {
+      const t = setInterval(reloadWards, 6000);
+      return () => clearInterval(t);
+    }, [reloadWards]),
+  );
 
   const remove = (c: Contact) =>
     Alert.alert("Remove guardian?", `${c.name} will no longer be alerted to suspicious transfers.`, [
@@ -67,6 +79,52 @@ export default function Family() {
         <View style={{ marginTop: 22 }}>
           <Button label="Add next of kin" icon="person-add" variant="ghost" onPress={() => router.push("/add-contact")} />
         </View>
+
+        {wardCases.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>People you protect</Text>
+            <Text style={styles.sectionSub}>
+              Accounts that list you as next of kin. Tap a case to watch it live and step in.
+            </Text>
+            <View style={{ gap: 12, marginTop: 14 }}>
+              {wardCases.map((w) => (
+                <Pressable
+                  key={w.case_id}
+                  onPress={() =>
+                    router.push(`/guardian/${w.case_id}?ward=${encodeURIComponent(w.ward_name)}` as never)
+                  }
+                >
+                  <Card style={w.active ? { ...styles.wardCard, ...styles.wardCardActive } : styles.wardCard}>
+                    <Avatar name={w.ward_name} tint={w.active ? color.crimson : color.ice} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.name}>{w.ward_name}</Text>
+                      <Text style={styles.meta}>
+                        {w.amount != null ? money(w.amount, w.currency) : "Transfer"}
+                        {w.payee_name ? ` to ${w.payee_name}` : ""}
+                        {!w.active && w.created_at ? ` · ${relativeDay(w.created_at)}` : ""}
+                      </Text>
+                    </View>
+                    {w.active ? (
+                      <View style={styles.liveTag}>
+                        <View style={styles.liveDot} />
+                        <Text style={styles.liveText}>LIVE</Text>
+                      </View>
+                    ) : (
+                      <Text
+                        style={[
+                          styles.statusText,
+                          { color: w.status === "blocked" ? color.crimson : color.signal },
+                        ]}
+                      >
+                        {w.status}
+                      </Text>
+                    )}
+                  </Card>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -83,4 +141,12 @@ const styles = StyleSheet.create({
   meta: { color: color.faint, fontSize: 12.5, marginTop: 2, textTransform: "capitalize" },
   primaryTag: { borderRadius: 6, backgroundColor: color.ice + "22", paddingHorizontal: 7, paddingVertical: 3 },
   primaryTagText: { color: color.ice, fontSize: 10.5, fontWeight: font.bold },
+  sectionTitle: { color: color.ink, fontSize: 19, fontWeight: font.black, letterSpacing: -0.3, marginTop: 34 },
+  sectionSub: { color: color.muted, fontSize: 13, lineHeight: 19, marginTop: 6 },
+  wardCard: { flexDirection: "row", alignItems: "center", gap: 13 },
+  wardCardActive: { borderColor: color.crimson + "66", backgroundColor: color.crimson + "0d" },
+  liveTag: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: radius.pill, borderWidth: 1, borderColor: color.crimson + "66", paddingHorizontal: 8, paddingVertical: 3 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: color.crimson },
+  liveText: { color: color.crimson, fontSize: 9.5, fontWeight: font.black, letterSpacing: 1 },
+  statusText: { fontSize: 11, fontWeight: font.bold, textTransform: "uppercase", letterSpacing: 0.6 },
 });

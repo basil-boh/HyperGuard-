@@ -1,7 +1,9 @@
 import { API_BASE } from "./config";
+import { reportNetworkFailure, reportNetworkSuccess } from "./connectivity";
 import { getUserId } from "./session";
 import type {
   Contact,
+  GuardianCase,
   InterventionPoll,
   LedgerEntry,
   Recipient,
@@ -12,14 +14,22 @@ import type {
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   // Identify the active user to the backend (falls back to the demo user server-side).
   const uid = await getUserId();
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(uid ? { "X-User-Id": uid } : {}),
-      ...(init?.headers ?? {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        ...(uid ? { "X-User-Id": uid } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (e) {
+    // fetch only rejects on network-level failure — the backend is unreachable.
+    reportNetworkFailure();
+    throw e;
+  }
+  reportNetworkSuccess();
   if (!res.ok) {
     let detail = `${res.status}`;
     try {
@@ -77,4 +87,22 @@ export const api = {
 
   intervention: (caseId: string) =>
     req<InterventionPoll>(`/api/wallet/intervention/${caseId}`),
+
+  // connectivity probe used by the offline banner's retry
+  health: () => req<{ status: string }>("/api/health"),
+
+  // push notifications
+  registerPushToken: (token: string) =>
+    req<{ user_id: string; devices: number }>("/api/users/push-token", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  // guardian live view
+  guardianCases: () => req<GuardianCase[]>("/api/wallet/guardian/cases"),
+  guardianAction: (caseId: string, action: "release" | "hold") =>
+    req<{ case_id: string; action: string; status: string; decision: string }>(
+      `/api/wallet/guardian/cases/${caseId}/action`,
+      { method: "POST", body: JSON.stringify({ action }) },
+    ),
 };

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "./api";
-import { POLL_INTERVAL_MS } from "./config";
+import { POLL_INTERVAL_MS, WS_URL } from "./config";
+import { reportNetworkSuccess } from "./connectivity";
 import type {
   AgentKey,
   Assessment,
@@ -12,6 +13,9 @@ import type {
 } from "./types";
 
 export type AgentState = "idle" | "engaged" | "done";
+
+/** How the view is being fed: live websocket, HTTP polling fallback, or still connecting. */
+export type LinkState = "connecting" | "live" | "polling";
 
 export interface TranscriptTurn {
   index: number;
@@ -39,6 +43,9 @@ export interface InterventionView {
   assessment: Assessment | null;
   escalation: Escalation | null;
   report: string | null;
+  // A guardian acted on this case from their own device.
+  guardianAction: { action: string; by: string } | null;
+  link: LinkState;
 }
 
 const AGENTS: AgentKey[] = [
@@ -68,6 +75,8 @@ function blank(): InterventionView {
     assessment: null,
     escalation: null,
     report: null,
+    guardianAction: null,
+    link: "connecting",
   };
 }
 
@@ -125,6 +134,18 @@ function reduce(poll: InterventionPoll): InterventionView {
       case "evidence.built":
         v.hasEvidence = true;
         break;
+      // Voice follow-up results stream over the same bus, so the websocket path
+      // shows them the moment they exist (the poll reconcile is the backstop).
+      case "assessment.ready":
+        v.assessment = ev.payload.assessment ?? v.assessment;
+        break;
+      case "report.filed":
+        v.escalation = ev.payload.escalation ?? v.escalation;
+        v.report = ev.payload.report ?? v.report;
+        break;
+      case "guardian.action":
+        v.guardianAction = { action: ev.payload.action, by: ev.payload.by };
+        break;
       case "case.closed":
         v.activeAgent = null;
         break;
@@ -141,35 +162,200 @@ function reduce(poll: InterventionPoll): InterventionView {
   return v;
 }
 
-// Keep polling for the voice follow-up after the graph closes, but bound it so an
-// unanswered call can't poll forever (~4 min at the configured interval).
-const MAX_FOLLOWUP_POLLS = 360;
+// Events that mean the server has authoritative state (outcome, balance, follow-up
+// results) worth reconciling with a one-shot poll.
+const RECONCILE_EVENTS = new Set([
+  "decision.made",
+  "case.closed",
+  "assessment.ready",
+  "report.filed",
+  "guardian.action",
+]);
 
+// Bound follow-up polling so an unanswered call can't poll forever (~4 min at the
+// fallback interval).
+const MAX_FOLLOWUP_POLLS = 360;
+// While the socket is live, the only thing not on the bus is the interview Q&A —
+// reconcile lazily during the follow-up phase.
+const FOLLOWUP_RECONCILE_MS = 4000;
+
+/**
+ * Live intervention view. Primary feed is the `/ws/events` stream filtered to this
+ * case (instant, ~0 requests); an HTTP poll of the intervention endpoint runs once
+ * on connect and after terminal events to pick up authoritative outcome/balance.
+ * If the socket can't be held (Expo Go on a flaky LAN), it degrades to the old
+ * polling behaviour and keeps retrying the socket with backoff.
+ */
 export function useIntervention(caseId: string): InterventionView {
   const [view, setView] = useState<InterventionView>(blank);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const followupPolls = useRef(0);
 
   useEffect(() => {
     let active = true;
+    let ws: WebSocket | null = null;
+    let link: LinkState = "connecting";
+    let wsFailures = 0;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
+    let followupPolls = 0;
+    let fetching = false;
 
-    const tick = async () => {
+    const seen = new Set<string>();
+    const events: SwarmEvent[] = [];
+    let snap: InterventionPoll | null = null;
+
+    const addEvent = (ev: SwarmEvent): boolean => {
+      if (!ev?.id || seen.has(ev.id)) return false;
+      seen.add(ev.id);
+      events.push(ev);
+      return true;
+    };
+
+    const merged = (): InterventionPoll => ({
+      case_id: caseId,
+      events,
+      outcome: snap?.outcome ?? null,
+      done: (snap?.done ?? false) || events.some((e) => e.type === "case.closed"),
+      followup_pending: snap?.followup_pending ?? false,
+      balance: snap?.balance ?? null,
+      context: snap?.context ?? [],
+      assessment: snap?.assessment ?? null,
+      escalation: snap?.escalation ?? null,
+      report: snap?.report ?? null,
+    });
+
+    const finished = () => {
+      const m = merged();
+      return m.done && !m.followup_pending;
+    };
+
+    const recompute = () => {
+      if (!active) return;
+      const v = reduce(merged());
+      v.link = link;
+      setView(v);
+    };
+
+    const fetchSnapshot = async () => {
+      if (fetching) return;
+      fetching = true;
       try {
         const poll = await api.intervention(caseId);
         if (!active) return;
-        setView(reduce(poll));
-        const awaitingFollowup = poll.followup_pending && followupPolls.current < MAX_FOLLOWUP_POLLS;
-        if (poll.followup_pending) followupPolls.current += 1;
-        if (!poll.done || awaitingFollowup) timer.current = setTimeout(tick, POLL_INTERVAL_MS);
+        snap = poll;
+        for (const ev of poll.events as SwarmEvent[]) addEvent(ev);
+        recompute();
       } catch {
-        if (active) timer.current = setTimeout(tick, POLL_INTERVAL_MS * 2);
+        // Unreachable backend is surfaced globally by the offline banner; keep
+        // rendering the last known view.
+      } finally {
+        fetching = false;
       }
     };
-    tick();
+
+    // ── Polling fallback (websocket down) ──────────────────────────────────────
+    const stopPolling = () => {
+      if (pollTimer) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+    };
+
+    const pollLoop = async () => {
+      pollTimer = null;
+      await fetchSnapshot();
+      if (!active || link === "live") return;
+      const m = merged();
+      const awaitingFollowup = m.followup_pending && followupPolls < MAX_FOLLOWUP_POLLS;
+      if (m.followup_pending) followupPolls += 1;
+      if (!m.done || awaitingFollowup) pollTimer = setTimeout(pollLoop, POLL_INTERVAL_MS);
+    };
+
+    const startPolling = () => {
+      if (!pollTimer) pollTimer = setTimeout(pollLoop, POLL_INTERVAL_MS);
+    };
+
+    // ── Websocket feed ─────────────────────────────────────────────────────────
+    const connect = () => {
+      if (!active) return;
+      let socket: WebSocket;
+      try {
+        socket = new WebSocket(WS_URL);
+      } catch {
+        down();
+        return;
+      }
+      ws = socket;
+      socket.onopen = () => {
+        if (!active || socket !== ws) return;
+        wsFailures = 0;
+        link = "live";
+        reportNetworkSuccess();
+        stopPolling();
+        // Replay covers recent events; the poll covers outcome/balance and
+        // anything older than the replay window.
+        fetchSnapshot();
+        recompute();
+      };
+      socket.onmessage = (msg) => {
+        if (!active) return;
+        try {
+          const ev = JSON.parse(String(msg.data)) as SwarmEvent;
+          if (ev.case_id !== caseId || !addEvent(ev)) return;
+          if (RECONCILE_EVENTS.has(ev.type)) fetchSnapshot();
+          recompute();
+        } catch {
+          // ignore malformed frames
+        }
+      };
+      socket.onerror = () => {
+        // onclose fires right after; handle teardown there
+      };
+      socket.onclose = () => {
+        if (!active || socket !== ws) return;
+        down();
+      };
+    };
+
+    const down = () => {
+      ws = null;
+      wsFailures += 1;
+      if (finished()) return;
+      link = "polling";
+      startPolling();
+      recompute();
+      reconnectTimer = setTimeout(connect, Math.min(8000, 500 * 2 ** Math.min(wsFailures, 4)));
+    };
+
+    // While live, lazily reconcile during the follow-up phase (interview Q&A is
+    // only exposed on the poll endpoint).
+    const reconcileLoop = () => {
+      reconcileTimer = setTimeout(async () => {
+        if (!active) return;
+        const m = merged();
+        if (link === "live" && m.followup_pending && followupPolls < MAX_FOLLOWUP_POLLS) {
+          followupPolls += 1;
+          await fetchSnapshot();
+        }
+        if (active && !finished()) reconcileLoop();
+      }, FOLLOWUP_RECONCILE_MS);
+    };
+
+    fetchSnapshot();
+    connect();
+    reconcileLoop();
 
     return () => {
       active = false;
-      if (timer.current) clearTimeout(timer.current);
+      stopPolling();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (reconcileTimer) clearTimeout(reconcileTimer);
+      if (ws) {
+        try {
+          ws.close();
+        } catch {}
+        ws = null;
+      }
     };
   }, [caseId]);
 

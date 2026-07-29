@@ -3,6 +3,7 @@ import { ActivityIndicator, Animated, ScrollView, StyleSheet, Text, View } from 
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import { Button, Card, Kicker } from "@/components/ui";
 import { AgentRelay } from "@/components/AgentRelay";
 import { RiskGauge } from "@/components/RiskGauge";
@@ -30,9 +31,52 @@ export default function Intervention() {
   const showCall = !!v.call || v.transcript.length > 0;
   const scam = v.classification && v.classification.archetype !== "none" && v.classification.confidence >= 0.4;
 
+  // Haptic pulses keyed to the moments that matter — each fires once per change.
+  const prevTurns = useRef(0);
+  const prevBand = useRef<string | null>(null);
+  const prevGuardian = useRef(false);
+  const prevDecision = useRef<string | null>(null);
+  const hasGuardian = !!v.guardian;
+  const band = v.risk?.band ?? null;
+
+  useEffect(() => {
+    if (v.transcript.length > prevTurns.current && prevTurns.current > 0) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    prevTurns.current = v.transcript.length;
+  }, [v.transcript.length]);
+
+  useEffect(() => {
+    if (band && band !== prevBand.current) {
+      (band === "critical" || band === "high"
+        ? Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+        : Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+      ).catch(() => {});
+    }
+    prevBand.current = band;
+  }, [band]);
+
+  useEffect(() => {
+    if (hasGuardian && !prevGuardian.current) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
+    prevGuardian.current = hasGuardian;
+  }, [hasGuardian]);
+
+  useEffect(() => {
+    if (v.done && v.decision && v.decision !== prevDecision.current) {
+      Haptics.notificationAsync(
+        v.decision === "approve"
+          ? Haptics.NotificationFeedbackType.Success
+          : Haptics.NotificationFeedbackType.Error,
+      ).catch(() => {});
+    }
+    prevDecision.current = v.decision;
+  }, [v.done, v.decision]);
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <LiveHeader reviewing={reviewing} decision={v.decision} />
+      <LiveHeader reviewing={reviewing} decision={v.decision} link={v.link} />
 
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
         {/* Risk */}
@@ -111,6 +155,26 @@ export default function Intervention() {
                   <Text style={styles.ackText}>Acknowledged</Text>
                 </View>
               )}
+            </Card>
+          </>
+        )}
+
+        {/* A guardian stepped in from their own device */}
+        {v.guardianAction && (
+          <>
+            <Text style={styles.section}>Guardian decision</Text>
+            <Card style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <Ionicons
+                name={v.guardianAction.action === "released" ? "arrow-redo" : "shield-checkmark"}
+                size={18}
+                color={v.guardianAction.action === "released" ? color.amber : color.signal}
+              />
+              <Text style={styles.guardianActionText}>
+                {v.guardianAction.by}{" "}
+                {v.guardianAction.action === "released"
+                  ? "reviewed this transfer and released it."
+                  : "confirmed the block on this transfer."}
+              </Text>
             </Card>
           </>
         )}
@@ -207,7 +271,15 @@ export default function Intervention() {
   );
 }
 
-function LiveHeader({ reviewing, decision }: { reviewing: boolean; decision: string | null }) {
+function LiveHeader({
+  reviewing,
+  decision,
+  link,
+}: {
+  reviewing: boolean;
+  decision: string | null;
+  link: string;
+}) {
   const a = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (!reviewing) return;
@@ -228,6 +300,9 @@ function LiveHeader({ reviewing, decision }: { reviewing: boolean; decision: str
       <Text style={styles.headerTitle}>
         {reviewing ? "HyperGuard is reviewing this transfer" : "Review complete"}
       </Text>
+      {reviewing && (
+        <Text style={styles.linkText}>{link === "live" ? "live" : "syncing"}</Text>
+      )}
     </View>
   );
 }
@@ -251,6 +326,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: color.hairline },
   liveDot: { width: 9, height: 9, borderRadius: 5 },
   headerTitle: { color: color.ink, fontSize: 14.5, fontWeight: font.semi, flex: 1 },
+  linkText: { color: color.faint, fontSize: 10.5, fontWeight: font.bold, textTransform: "uppercase", letterSpacing: 1 },
   section: { color: color.muted, fontSize: 12, fontWeight: font.bold, letterSpacing: 1.4, textTransform: "uppercase", marginTop: 22, marginBottom: 10 },
   callHead: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 14 },
   callMeta: { color: color.faint, fontSize: 11.5, textTransform: "uppercase", letterSpacing: 1 },
@@ -267,6 +343,7 @@ const styles = StyleSheet.create({
   guardianName: { color: color.ink, fontSize: 15, fontWeight: font.semi },
   guardianMeta: { color: color.faint, fontSize: 12.5, marginTop: 2, textTransform: "capitalize" },
   ackTag: { borderRadius: radius.pill, backgroundColor: color.signalSoft, paddingHorizontal: 9, paddingVertical: 4 },
+  guardianActionText: { color: color.ink, fontSize: 13.5, lineHeight: 19, flex: 1 },
   ackText: { color: color.signal, fontSize: 10.5, fontWeight: font.bold, textTransform: "uppercase" },
   qaBorder: { borderTopWidth: 1, borderTopColor: color.hairline, marginTop: 12, paddingTop: 12 },
   qaQ: { color: color.faint, fontSize: 12.5, lineHeight: 18 },

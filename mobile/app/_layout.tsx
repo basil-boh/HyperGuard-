@@ -3,12 +3,17 @@ import { View } from "react-native";
 import { Stack, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { usePushNotifications } from "@/lib/push";
 import { loadUser } from "@/lib/session";
 import { color } from "@/lib/theme";
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
   const [hasUser, setHasUser] = useState(false);
+
+  // Register this device for pushes and deep-link notification taps.
+  usePushNotifications(ready && hasUser);
 
   useEffect(() => {
     loadUser().then((u) => {
@@ -31,6 +36,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
+      <OfflineBanner />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -47,6 +53,7 @@ export default function RootLayout() {
           name="intervention/[caseId]"
           options={{ gestureEnabled: false, animation: "fade" }}
         />
+        <Stack.Screen name="guardian/[caseId]" options={{ animation: "slide_from_bottom" }} />
       </Stack>
     </SafeAreaProvider>
   );

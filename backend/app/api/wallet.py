@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,7 +19,10 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import current_account, current_user_id, repository
 from app.config import get_settings
+from app.domain.events import EventType, SwarmEvent
 from app.graph import get_orchestrator
+from app.integrations.event_bus import get_event_bus
+from app.integrations.push import phone_key
 from app.services.baselines import derive_profile
 from app.wallet.registry import get_registry
 from app.wallet.repository import WalletRepository
@@ -172,6 +176,134 @@ async def transfer(
 
     asyncio.create_task(_drive())
     return {"case_id": case_id, "transaction_id": txn.id, "status": "intervening"}
+
+
+# ── Guardian view ────────────────────────────────────────────────────────────────
+class GuardianActionRequest(BaseModel):
+    action: Literal["release", "hold"]
+
+
+def _is_guardian_of(me: Account, ward: Account) -> bool:
+    my_key = phone_key(me.owner.phone)
+    return my_key is not None and any(
+        phone_key(c.phone) == my_key for c in ward.owner.trusted_contacts
+    )
+
+
+@router.get("/guardian/cases")
+async def guardian_cases(
+    user_id: str = Depends(current_user_id),
+    repo: WalletRepository = Depends(repository),
+) -> list[dict]:
+    """Cases for every account that lists the current user as next of kin —
+    in-flight interventions first (watchable live), then the case history."""
+    bank = await repo.load_bank()
+    me = bank.account(user_id)
+    if me is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    wards = {
+        acc.owner.id: acc
+        for acc in bank.list_accounts()
+        if acc.owner.id != user_id and _is_guardian_of(me, acc)
+    }
+
+    rows: list[dict] = []
+    seen: set[str] = set()
+    for case_id, bucket in reversed(get_registry().open_cases()):
+        cust = bucket.get("customer") or {}
+        acc = wards.get(cust.get("id"))
+        if acc is None:
+            continue
+        txn = bucket.get("transaction") or {}
+        risk = bucket.get("risk") or {}
+        rows.append({
+            "case_id": case_id,
+            "ward_id": acc.owner.id,
+            "ward_name": acc.owner.name,
+            "active": True,
+            "created_at": txn.get("requested_at"),
+            "amount": txn.get("amount"),
+            "currency": txn.get("currency", "SGD"),
+            "payee_name": txn.get("payee_name"),
+            "decision": None,
+            "status": "intervening",
+            "risk_score": (risk.get("score") if isinstance(risk, dict) else None),
+            "scam_title": (bucket.get("classification") or {}).get("title"),
+        })
+        seen.add(case_id)
+    for acc in wards.values():
+        for case in bank.cases_for(acc.owner.id):
+            if case.case_id in seen:
+                continue
+            rows.append({
+                "case_id": case.case_id,
+                "ward_id": acc.owner.id,
+                "ward_name": acc.owner.name,
+                "active": False,
+                "created_at": case.created_at,
+                "amount": case.transaction.get("amount"),
+                "currency": case.transaction.get("currency", "SGD"),
+                "payee_name": case.transaction.get("payee_name"),
+                "decision": case.decision,
+                "status": case.status,
+                "risk_score": case.risk_score,
+                "scam_title": (case.classification or {}).get("title"),
+            })
+    return rows
+
+
+@router.post("/guardian/cases/{case_id}/action")
+async def guardian_action(
+    case_id: str,
+    body: GuardianActionRequest,
+    user_id: str = Depends(current_user_id),
+    repo: WalletRepository = Depends(repository),
+) -> dict:
+    """A guardian's verdict on a blocked transfer: release it (the ward really did
+    mean it) or keep the block. Only available once the swarm has decided."""
+    case = await repo.get_case(case_id)
+    if case is None:
+        raise HTTPException(status_code=409, detail="intervention still in progress")
+    ward = await repo.get_account(case.user_id)
+    me = await repo.get_account(user_id)
+    if ward is None or me is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    if not _is_guardian_of(me, ward):
+        raise HTTPException(status_code=403, detail="you are not a guardian for this account")
+
+    entry = next((e for e in ward.ledger if e.case_id == case_id), None)
+
+    if body.action == "release":
+        if case.status != "blocked":
+            raise HTTPException(status_code=400, detail="transfer is not blocked")
+        if entry is not None:
+            if ward.balance < entry.amount:
+                raise HTTPException(status_code=400, detail="insufficient balance to release")
+            ward.balance -= entry.amount
+            entry.status = "approved"
+            entry.decision = "approve"
+        case.status = "approved"
+        case.decision = "approve"
+        case.narrative = (case.narrative or "").strip() + f" Released by guardian {me.owner.name} after review."
+        result = "released"
+    else:
+        for alert in case.guardian_alerts:
+            alert["acknowledged"] = True
+            alert["status"] = "acknowledged"
+        case.narrative = (case.narrative or "").strip() + f" Guardian {me.owner.name} confirmed the block."
+        result = "held"
+
+    if entry is not None:
+        await repo.commit_transfer(case.user_id, ward, entry, case)
+    await get_event_bus().publish(
+        SwarmEvent(
+            type=EventType.guardian_action,
+            case_id=case_id,
+            agent="guardian",
+            payload={"action": result, "by": me.owner.name},
+        )
+    )
+    return {"case_id": case_id, "action": result, "status": case.status, "decision": case.decision}
 
 
 @router.get("/intervention/{case_id}")

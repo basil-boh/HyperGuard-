@@ -80,6 +80,11 @@ class InterventionRegistry:
     def get(self, case_id: str) -> dict | None:
         return self._cases.get(case_id)
 
+    def open_cases(self) -> list[tuple[str, dict]]:
+        """Cases still being worked by the swarm (no outcome yet), newest last.
+        Used by the guardian live view to surface in-flight interventions."""
+        return [(cid, self._cases[cid]) for cid in self._order if not self._cases[cid]["done"]]
+
     # ── Bus consumer lifecycle ───────────────────────────────────────────────────
     async def start(self) -> None:
         if self._task is None:

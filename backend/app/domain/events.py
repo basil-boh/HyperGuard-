@@ -32,6 +32,8 @@ class EventType(str, Enum):
     report_filed = "report.filed"
     # A human operator intervened from a console: freeze, escalate, or hand-off.
     operator_override = "operator.override"
+    # A guardian acted on a case from their own device (release / keep blocked).
+    guardian_action = "guardian.action"
     case_closed = "case.closed"
 
 

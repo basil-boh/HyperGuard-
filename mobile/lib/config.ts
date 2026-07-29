@@ -16,4 +16,7 @@ function resolveApiBase(): string {
 }
 
 export const API_BASE = resolveApiBase();
+// Live event stream (same host as the REST API).
+export const WS_URL = API_BASE.replace(/^http/, "ws") + "/ws/events";
+// Fallback cadence when the websocket is down.
 export const POLL_INTERVAL_MS = 650;
