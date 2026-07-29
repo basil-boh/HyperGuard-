@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { runIntervention, wsURL } from "./api";
+import { getToken, redirectToLogin } from "./auth";
 import type {
   AgentKey,
   Decision,
@@ -221,6 +222,11 @@ export function useSwarmStream() {
 
       ws.onopen = () => {
         attempts = 0;
+        // First-message auth: the backend expects the operator token before any
+        // events flow (cross-host websockets can't carry an Authorization header).
+        // Harmless when the backend runs with auth disabled — it never reads it.
+        const token = getToken();
+        if (token) ws.send(JSON.stringify({ token }));
         setLink("online");
         send({ op: "hello", operator: selfRef.current, viewing: caseRef.current });
       };
@@ -247,8 +253,13 @@ export function useSwarmStream() {
         lastEventIdRef.current = event.id;
         dispatch({ kind: "event", event });
       };
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         if (closed) return;
+        if (ev.code === 4401) {
+          // Backend refused the token — session expired or never logged in.
+          redirectToLogin();
+          return;
+        }
         setLink("offline");
         const delay =
           Math.min(RECONNECT_CAP_MS, RECONNECT_BASE_MS * 2 ** attempts) + Math.random() * 400;

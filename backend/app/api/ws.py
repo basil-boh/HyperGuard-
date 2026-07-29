@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
+from app.api.auth import verify_admin_token
 from app.config import Settings, get_settings
 from app.domain.events import EventType, SwarmEvent
 from app.integrations.event_bus import get_event_bus
@@ -39,6 +40,27 @@ router = APIRouter()
 
 # Live console roster: websocket → {operator: {id, name}, viewing, connected_at, last_seen}
 _consoles: dict[WebSocket, dict] = {}
+
+
+AUTH_DEADLINE_SECONDS = 5.0
+POLICY_VIOLATION = 4401  # app-level "unauthorized", mirrors HTTP 401
+
+
+async def _authenticate(websocket: WebSocket) -> bool:
+    """First-message auth: expect `{"token": ...}` before the deadline."""
+    try:
+        first = await asyncio.wait_for(websocket.receive_json(), timeout=AUTH_DEADLINE_SECONDS)
+    except WebSocketDisconnect:
+        return False
+    except Exception:  # timeout, non-JSON frame, binary frame
+        await websocket.close(code=POLICY_VIOLATION, reason="operator token required")
+        return False
+    token = first.get("token") if isinstance(first, dict) else None
+    if not token or not verify_admin_token(token, get_settings()):
+        await websocket.close(code=POLICY_VIOLATION, reason="invalid operator token")
+        return False
+    await websocket.send_json({"type": "auth.ok"})
+    return True
 
 
 def _now() -> str:
@@ -194,6 +216,8 @@ async def events(
         await websocket.close(code=4401)
         return
     await websocket.accept()
+    if get_settings().admin_auth_enabled and not await _authenticate(websocket):
+        return
     bus = get_event_bus()
 
     # Replay history so a late console catches the current case; a reconnecting

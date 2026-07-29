@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.deps import repository, require_admin
+from app.api.auth import require_admin
+from app.api.deps import repository
 from app.wallet.repository import WalletRepository
 
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])

@@ -1,4 +1,4 @@
-import { getAdminKey } from "./admin";
+import { authHeaders, redirectToLogin } from "./auth";
 import type { InterventionOutcome, Scenario } from "./types";
 
 // Requests go through the Next rewrite proxy (`/api/*` → backend) by default, so
@@ -33,9 +33,13 @@ export async function fetchScenarios(): Promise<Scenario[]> {
 export async function runIntervention(scenarioId: string): Promise<InterventionOutcome> {
   const res = await fetch(`${API_BASE}/api/interventions/run`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...authHeaders() },
     body: JSON.stringify({ scenario_id: scenarioId }),
   });
+  if (res.status === 401) {
+    redirectToLogin();
+    throw new Error("operator login required");
+  }
   if (!res.ok) throw new Error(`run failed → ${res.status}`);
   return res.json();
 }

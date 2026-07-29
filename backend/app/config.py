@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     # a live operation rather than an instant dump. Set to 0 for tests.
     demo_step_delay: float = 0.75
 
+    # ── Operator auth ──────────────────────────────────────────────────────────
+    # Shared secret for the operations console. When unset, the console (admin API,
+    # event websocket, scenario launcher) is open — the zero-config demo posture.
+    admin_password: str | None = None
+    # HMAC key for signing operator tokens; derived from admin_password when unset,
+    # so a single env var is enough. Set explicitly to survive password rotation.
+    admin_token_secret: str | None = None
+    # Operator tokens expire after one shift.
+    admin_token_ttl_seconds: int = 8 * 3600
+
     # ── Multi-user / behaviour ──────────────────────────────────────────────────
     # The account a request maps to when no X-User-Id header is sent (back-compat
     # with the single-user demo client).
@@ -121,6 +131,10 @@ class Settings(BaseSettings):
         return bool(self.elevenlabs_api_key) and not self.force_demo_mode
 
     @property
+    def admin_auth_enabled(self) -> bool:
+        return bool(self.admin_password)
+
+    @property
     def persistence_enabled(self) -> bool:
         return bool(self.supabase_url and self.supabase_service_key)
 
@@ -156,6 +170,7 @@ class Settings(BaseSettings):
             "speech": self.speech_enabled,
             "persistence": self.persistence_enabled,
             "distributed_bus": self.event_bus_enabled,
+            "operator_auth": self.admin_auth_enabled,
             "demo_mode": self.demo_mode,
             "admin_auth": self.admin_auth_enabled,
             "user_auth": self.user_auth_enabled,

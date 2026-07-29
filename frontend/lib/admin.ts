@@ -1,5 +1,6 @@
 // Control-centre API client (the bank's view over the protection layer).
 
+import { authHeaders, redirectToLogin } from "@/lib/auth";
 import type { ScamClassification } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
@@ -23,15 +24,10 @@ export function setAdminKey(key: string): void {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const key = getAdminKey();
-  const res = await fetch(`${API_BASE}${path}`, {
-    cache: "no-store",
-    headers: key ? { "X-Admin-Key": key } : {},
-  });
+  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store", headers: authHeaders() });
   if (res.status === 401) {
-    throw new Error(
-      `GET ${path} → 401 (admin key missing/incorrect — set it with localStorage.hg_admin_key or NEXT_PUBLIC_ADMIN_KEY)`,
-    );
+    redirectToLogin();
+    throw new Error("operator login required");
   }
   if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
   return res.json();
