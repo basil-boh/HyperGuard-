@@ -5,7 +5,10 @@ posts each spoken answer to `/twilio/voice/answer`. We ask a short series of con
 questions, capture the speech, stream each turn onto the swarm bus (so the app + console
 show the live conversation), and kick off the LLM follow-up when the call ends.
 
-No auth: these are Twilio-to-us webhooks. The endpoints return TwiML (XML).
+These are Twilio-to-us webhooks returning TwiML (XML), authenticated by verifying
+the `X-Twilio-Signature` header against our auth token — anyone else posting fake
+call events gets a 403. Without a Twilio token configured (local simulation) the
+check is skipped in development and the routes are disabled in production.
 """
 
 from __future__ import annotations
@@ -14,14 +17,51 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
+from app.config import Settings, get_settings
 from app.domain.events import EventType, SwarmEvent
 from app.integrations.event_bus import get_event_bus
 from app.wallet.registry import get_registry
 
 logger = logging.getLogger("hyperguard.twilio")
-router = APIRouter(prefix="/twilio")
+
+
+def _webhook_url(request: Request, settings: Settings) -> str:
+    """The URL Twilio signed. Behind Railway's proxy `request.url` is the internal
+    http:// address, so prefer the configured public base (which is also what the
+    outbound call's webhook and the relative Gather actions resolve against)."""
+    if settings.public_base_url:
+        base = settings.public_base_url.rstrip("/")
+        query = request.url.query
+        return f"{base}{request.url.path}" + (f"?{query}" if query else "")
+    return str(request.url)
+
+
+async def verify_twilio_signature(
+    request: Request, settings: Settings = Depends(get_settings)
+) -> None:
+    if not settings.twilio_validation_enabled:
+        if settings.is_production:
+            raise HTTPException(status_code=503, detail="telephony webhooks disabled")
+        return  # local simulation, nothing to validate against
+    from twilio.request_validator import RequestValidator
+
+    params: dict[str, str] = {}
+    if request.method == "POST":
+        form = await request.form()  # cached; the route handler re-reads it freely
+        params = {key: value for key, value in form.items() if isinstance(value, str)}
+    valid = RequestValidator(settings.twilio_auth_token).validate(
+        _webhook_url(request, settings),
+        params,
+        request.headers.get("X-Twilio-Signature", ""),
+    )
+    if not valid:
+        logger.warning("Rejected webhook with bad Twilio signature: %s", request.url.path)
+        raise HTTPException(status_code=403, detail="invalid Twilio signature")
+
+
+router = APIRouter(prefix="/twilio", dependencies=[Depends(verify_twilio_signature)])
 
 GREETING = (
     "Hello, this is HyperGuard calling from your bank's protection team. "

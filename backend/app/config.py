@@ -82,6 +82,17 @@ class Settings(BaseSettings):
     # voice webhooks. When unset, the call degrades to the single-line spoken warning.
     public_base_url: str | None = None
 
+    # ── Security ───────────────────────────────────────────────────────────────
+    # Shared secret for the control-centre API (`/api/admin/*`) and the event
+    # WebSocket. When unset the admin surface stays open in development but is
+    # refused entirely outside it.
+    admin_api_key: str | None = None
+    # HMAC secret for signed user session tokens. When set, user-scoped routes
+    # require `Authorization: Bearer <token>` (minted at profile selection) and the
+    # raw `X-User-Id` header is no longer trusted.
+    session_secret: str | None = None
+    session_ttl_hours: int = 720  # 30 days; the profile is picked once per device.
+
     # ── Overrides ──────────────────────────────────────────────────────────────
     # Force the deterministic simulation path even when credentials are present —
     # useful for a hermetic stage demo.
@@ -122,6 +133,22 @@ class Settings(BaseSettings):
         """True when no live LLM is wired, the swarm runs on deterministic scripts."""
         return self.force_demo_mode or not self.llm_enabled
 
+    @property
+    def is_production(self) -> bool:
+        return self.environment.lower() not in {"development", "dev", "local", "test"}
+
+    @property
+    def admin_auth_enabled(self) -> bool:
+        return bool(self.admin_api_key)
+
+    @property
+    def user_auth_enabled(self) -> bool:
+        return bool(self.session_secret)
+
+    @property
+    def twilio_validation_enabled(self) -> bool:
+        return bool(self.twilio_auth_token)
+
     def capability_report(self) -> dict[str, bool]:
         return {
             "llm": self.llm_enabled,
@@ -130,6 +157,9 @@ class Settings(BaseSettings):
             "persistence": self.persistence_enabled,
             "distributed_bus": self.event_bus_enabled,
             "demo_mode": self.demo_mode,
+            "admin_auth": self.admin_auth_enabled,
+            "user_auth": self.user_auth_enabled,
+            "twilio_validation": self.twilio_validation_enabled,
         }
 
 

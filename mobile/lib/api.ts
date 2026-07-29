@@ -1,6 +1,6 @@
 import { API_BASE } from "./config";
 import { reportNetworkFailure, reportNetworkSuccess } from "./connectivity";
-import { getUserId } from "./session";
+import { getToken, getUserId } from "./session";
 import type {
   Contact,
   GuardianCase,
@@ -12,14 +12,17 @@ import type {
 } from "./types";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  // Identify the active user to the backend (falls back to the demo user server-side).
+  // Identify the active user: signed session token when the backend enforces
+  // auth, plus the legacy X-User-Id header for backends that don't.
   const uid = await getUserId();
+  const token = await getToken();
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers: {
         "content-type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(uid ? { "X-User-Id": uid } : {}),
         ...(init?.headers ?? {}),
       },
@@ -43,6 +46,11 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   // identity
   listUsers: () => req<UserProfile[]>("/api/users"),
+  createSession: (userId: string) =>
+    req<{ user_id: string; token: string | null; expires_at: number | null }>(
+      "/api/users/session",
+      { method: "POST", body: JSON.stringify({ user_id: userId }) },
+    ),
   createUser: (body: {
     name: string;
     phone: string;
