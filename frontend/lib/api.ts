@@ -1,3 +1,4 @@
+import { getAdminKey } from "./admin";
 import { authHeaders, redirectToLogin } from "./auth";
 import type { InterventionOutcome, Scenario } from "./types";
 

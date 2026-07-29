@@ -18,6 +18,9 @@ next-env.d.ts
 .env.local
 *.local
 
+# Tooling state
+.omc/
+
 # OS / editor
 .DS_Store
 .idea/
