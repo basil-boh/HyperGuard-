@@ -89,28 +89,9 @@ The grocery run clears in milliseconds and nobody is ever called. That restraint
 
 Five agents on a LangGraph state machine. Nodes are agents; edges are conditional transitions on `risk_score`, `verification_status` and `scam_detected`. A single shared state object carries the transaction, the customer's behavioural profile, the risk assessment, the live transcript, the scam classification, the verdict and the evidence through the graph.
 
-```mermaid
-flowchart TD
-    A["Customer authorises<br/>a transfer"] --> B["Digital Twin<br/>scores it against<br/>her own baseline"]
-    B -->|"risk under 0.58"| Z["Approved instantly<br/>— she never knows<br/>we were there"]
-    B -->|"risk 0.58 and up"| C["Voice Negotiator<br/>calls her"]
-    C --> D["Educator<br/>reads her answers,<br/>names the scam script"]
-    D -->|"warning to read aloud"| C
-    D --> E["Guardian<br/>wakes up a<br/>trusted contact"]
-    E --> F["Arbiter<br/>weighs everything,<br/>writes the rationale"]
-    F --> G["Released"]
-    F --> H["Blocked — money<br/>never leaves"]
-    H --> I["Recovery Coordinator<br/>builds the evidence<br/>pack for bank + police"]
-
-    classDef base fill:#07080c,stroke:#2a2f26,stroke-width:1px,color:#d7dfc8
-    classDef agent fill:#0c0f08,stroke:#c9f24a,stroke-width:1.5px,color:#e4f3bd
-    classDef pass fill:#0c1408,stroke:#c9f24a,stroke-width:1.5px,color:#c9f24a
-    classDef halt fill:#170a0d,stroke:#ff4d5e,stroke-width:1.5px,color:#ff8d97
-    class A base
-    class B,C,D,E,F agent
-    class Z,G pass
-    class H,I halt
-```
+<p align="center">
+  <img src="assets/flow.svg" width="820" alt="A transfer is authorised and scored by the Digital Twin. Under 0.58 it is approved instantly. At 0.58 and above the Voice Negotiator calls her, the Educator names the scam script and feeds a counter-line back into the call, the Guardian wakes a trusted contact, and the Arbiter either releases or blocks the transfer. A blocked case goes to the Recovery Coordinator for the evidence pack." />
+</p>
 
 ### <img src="assets/icons/twin.svg" width="22" align="middle" alt="" /> Digital Twin — knows what normal looks like
 
