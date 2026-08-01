@@ -91,19 +91,28 @@ Five agents on a LangGraph state machine. Nodes are agents; edges are conditiona
 
 ```mermaid
 flowchart TD
-    A["💸 Customer authorises<br/>a transfer"] --> B["🧬 Digital Twin<br/>scores it against<br/>her own baseline"]
-    B -->|"risk under 0.58"| Z["✅ Approved instantly<br/>— she never knows<br/>we were there"]
-    B -->|"risk 0.58 and up"| C["📞 Voice Negotiator<br/>calls her"]
-    C --> D["🎓 Educator<br/>reads her answers,<br/>names the scam script"]
+    A["Customer authorises<br/>a transfer"] --> B["Digital Twin<br/>scores it against<br/>her own baseline"]
+    B -->|"risk under 0.58"| Z["Approved instantly<br/>— she never knows<br/>we were there"]
+    B -->|"risk 0.58 and up"| C["Voice Negotiator<br/>calls her"]
+    C --> D["Educator<br/>reads her answers,<br/>names the scam script"]
     D -->|"warning to read aloud"| C
-    D --> E["👪 Guardian<br/>wakes up a<br/>trusted contact"]
-    E --> F["⚖️ Arbiter<br/>weighs everything,<br/>writes the rationale"]
-    F --> G["✅ Released"]
-    F --> H["🛑 Blocked — money<br/>never leaves"]
-    H --> I["📁 Recovery Coordinator<br/>builds the evidence<br/>pack for bank + police"]
+    D --> E["Guardian<br/>wakes up a<br/>trusted contact"]
+    E --> F["Arbiter<br/>weighs everything,<br/>writes the rationale"]
+    F --> G["Released"]
+    F --> H["Blocked — money<br/>never leaves"]
+    H --> I["Recovery Coordinator<br/>builds the evidence<br/>pack for bank + police"]
+
+    classDef base fill:#07080c,stroke:#2a2f26,stroke-width:1px,color:#d7dfc8
+    classDef agent fill:#0c0f08,stroke:#c9f24a,stroke-width:1.5px,color:#e4f3bd
+    classDef pass fill:#0c1408,stroke:#c9f24a,stroke-width:1.5px,color:#c9f24a
+    classDef halt fill:#170a0d,stroke:#ff4d5e,stroke-width:1.5px,color:#ff8d97
+    class A base
+    class B,C,D,E,F agent
+    class Z,G pass
+    class H,I halt
 ```
 
-### 🧬 Digital Twin — knows what normal looks like
+### <img src="assets/icons/twin.svg" width="22" align="middle" alt="" /> Digital Twin — knows what normal looks like
 
 Every customer carries a behavioural baseline: typical amounts, known payees, active hours, transfer velocity. Each incoming transfer is scored against *her* history, not a population average, and the signals combine through a logistic link into a 0–1 risk score.
 
@@ -111,25 +120,25 @@ The weights are legible constants, not a black box. A first-ever payee contribut
 
 This is deliberately not a deep model. At the moment of intervention the *explanation* matters as much as the number — the customer on the phone needs to hear why, and an investigator needs to read it six months later.
 
-### 📞 Voice Negotiator — makes the call
+### <img src="assets/icons/negotiator.svg" width="22" align="middle" alt="" /> Voice Negotiator — makes the call
 
 The instant risk crosses the threshold, an outbound call is placed via Twilio with an ElevenLabs voice. It isn't an IVR reading a warning; it conducts contextual verification — *who asked you to send this, what did they say would happen if you didn't* — and streams the transcript back into the graph turn by turn. When telephony credentials are live the conversation runs out-of-band over voice webhooks; when they aren't, the same dialogue plays out deterministically in-process.
 
-### 🎓 Educator — names the script she's being read from
+### <img src="assets/icons/educator.svg" width="22" align="middle" alt="" /> Educator — names the script she's being read from
 
 Scams are not improvised. They run from a small number of scripts, and each one has a tell. The Educator classifies the live transcript against six archetypes — **government/police impersonation, bank impersonation, investment/crypto, romance, job/task, and tech support** — and feeds the counter-line straight back into the call for the Negotiator to say aloud. For police impersonation, that's the sentence no real agency ever crosses: *we will never ask you to move money to a safe account.*
 
 Naming the script is what breaks it. A generic "this may be a scam" warning is easy for a victim mid-manipulation to dismiss. Being told exactly what the person on the other line is about to say next is not.
 
-### 👪 Guardian — brings in someone she trusts
+### <img src="assets/icons/guardian.svg" width="22" align="middle" alt="" /> Guardian — brings in someone she trusts
 
 Some victims cannot be talked down by a stranger, especially one calling from the bank when a "policeman" has just told them the bank is compromised. The Guardian escalates to pre-authorised trusted contacts with the transaction context and the risk rationale, adding a human verification layer exactly where it's needed most.
 
-### 📁 Recovery Coordinator — for when it's already too late
+### <img src="assets/icons/recovery.svg" width="22" align="middle" alt="" /> Recovery Coordinator — for when it's already too late
 
 When fraud has already been processed, the swarm runs a different path entirely and assembles an evidence package: transaction trail, the risk signals that fired, the full conversation log, and the beneficiary details, formatted for the bank's recovery team and law enforcement. Speed is everything in fund recovery, and this turns a multi-day paperwork exercise into one click.
 
-**⚖️ And the Arbiter decides.** It weighs the risk score, the verification status and the scam classification into a single verdict with a written rationale attached. Every decision the swarm makes is explainable and audited — which is the only way a layer like this ever passes a bank's compliance review.
+<img src="assets/icons/arbiter.svg" width="18" align="middle" alt="" /> **And the Arbiter decides.** It weighs the risk score, the verification status and the scam classification into a single verdict with a written rationale attached. Every decision the swarm makes is explainable and audited — which is the only way a layer like this ever passes a bank's compliance review.
 
 ---
 
@@ -137,9 +146,9 @@ When fraud has already been processed, the swarm runs a different path entirely 
 
 | | | |
 |---|---|---|
-| 🖥️ **Control centre** | `frontend/` | The bank's mission control. Live risk meters, streaming transcripts, the agent relay firing in real time, every case filed with its full decision trail. Next.js, with a bespoke "interdiction console" design system, a React-Three-Fiber hero and GSAP scroll choreography. |
-| 📱 **Wallet** | `mobile/` | The customer's side. A working Expo banking app — balances, payees, transfers, next-of-kin — so the swarm has real transactions to act on. Send money to the hidden scam payee and watch the intervention land on your own phone. |
-| ⚙️ **Swarm** | `backend/` | FastAPI + LangGraph. REST, WebSocket event stream, wallet and admin APIs, and the five agents. [Live on Railway →](https://hyperguard-production.up.railway.app/docs) |
+| <img src="assets/icons/console.svg" width="20" align="middle" alt="" /> **Control centre** | `frontend/` | The bank's mission control. Live risk meters, streaming transcripts, the agent relay firing in real time, every case filed with its full decision trail. Next.js, with a bespoke "interdiction console" design system, a React-Three-Fiber hero and GSAP scroll choreography. |
+| <img src="assets/icons/wallet.svg" width="20" align="middle" alt="" /> **Wallet** | `mobile/` | The customer's side. A working Expo banking app — balances, payees, transfers, next-of-kin — so the swarm has real transactions to act on. Send money to the hidden scam payee and watch the intervention land on your own phone. |
+| <img src="assets/icons/swarm.svg" width="20" align="middle" alt="" /> **Swarm** | `backend/` | FastAPI + LangGraph. REST, WebSocket event stream, wallet and admin APIs, and the five agents. [Live on Railway →](https://hyperguard-production.up.railway.app/docs) |
 
 ---
 
@@ -165,6 +174,26 @@ uvicorn app.main:app --reload --port 8000
 **Control centre** — `cd frontend && npm install && npm run dev` → [localhost:3000](http://localhost:3000)
 
 **Wallet** — bind the backend to your LAN first (`uvicorn app.main:app --host 0.0.0.0 --port 8000`), then `cd mobile && npm install && npx expo start` and open it in Expo Go. The app auto-discovers the backend from the Expo dev host, so there is nothing to configure on the phone. See [mobile/README.md](./mobile/README.md) for the demo script.
+
+### Signing in, and the customers you can sign in as
+
+The wallet opens on a sign-in screen: **phone number + 6-digit PIN**. The database ships with seven customers, each with a different financial signature — because the risk engine scores against *learned* behaviour, the only honest way to test it is with accounts that genuinely differ. Tap **Demo accounts** on the sign-in screen to pick one without typing.
+
+| Phone | PIN | Customer | Signature | Good for testing |
+|---|---|---|---|---|
+| `+6580001234` | `112233` | Alex Tan, 67 | Retiree, small regular outgoings | The default demo — two planted scam payees |
+| `+6580000001` | `445566` | May Tan, 72 | Retiree, two scams already on file | Repeat-target escalation, populated case history |
+| `+6580000002` | `778899` | Daniel Lim, 34 | Salaried professional, high volume | Four-figure transfers that are genuinely fine |
+| `+6580000003` | `102030` | Wong Ah Kow, 81 | Thin file, tiny amounts | Any four-figure transfer reads as critical |
+| `+6580000004` | `135791` | Priya Nair, 58 | Steady bills and school fees | Tech-support interception with a follow-up call |
+| `+6580000005` | `246810` | Siti Rahman, 29 | Gig worker, many small payouts | High velocity, low amounts |
+| `+6580000006` | `909090` | Robert Chen, 46 | SME owner, five-figure supplier runs | Big ≠ suspicious |
+
+The contrast is the point: the *same* SGD 8,000 transfer is a 99% critical block for Wong and unremarkable for Robert. Each account carries its own balance, saved payees, guardians and 19–31 transactions of history, plus at least one hidden scam payee to transfer to.
+
+Credentials are served by `GET /api/auth/demo-accounts` and rendered in the app. Set `EXPOSE_DEMO_CREDENTIALS=false` to hide them, and `ALLOW_HEADER_USER_OVERRIDE=false` to require a real token (the legacy `X-User-Id` header is honoured by default so curl demos keep working).
+
+PINs are stored as PBKDF2-HMAC-SHA256 hashes, never in plain text; sessions are stateless HMAC-signed bearer tokens. Repeated failures lock a phone number out for 60 seconds.
 
 ### Keys, and what happens without them
 
@@ -254,6 +283,6 @@ HyperGuard is a prototype built for demonstration. It is **not** a production fi
 
 **Detection tells you *after*. HyperGuard intervenes *during*.**
 
-Built with 🧬 [LangGraph](https://langchain-ai.github.io/langgraph/) &nbsp;·&nbsp; 📞 [Twilio](https://www.twilio.com) &nbsp;·&nbsp; 🎙️ [ElevenLabs](https://elevenlabs.io) &nbsp;·&nbsp; 🗄️ [Supabase](https://supabase.com) &nbsp;·&nbsp; ⚡ [FastAPI](https://fastapi.tiangolo.com) &nbsp;·&nbsp; ▲ [Next.js](https://nextjs.org)
+Built with [LangGraph](https://langchain-ai.github.io/langgraph/) &nbsp;·&nbsp; [Twilio](https://www.twilio.com) &nbsp;·&nbsp; [ElevenLabs](https://elevenlabs.io) &nbsp;·&nbsp; [Supabase](https://supabase.com) &nbsp;·&nbsp; [FastAPI](https://fastapi.tiangolo.com) &nbsp;·&nbsp; [Next.js](https://nextjs.org)
 
 </div>
