@@ -1,0 +1,13 @@
+<svg width="140" height="140" viewBox="0 0 140 140" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HyperGuard">
+  <rect x="0" y="0" width="140" height="140" rx="30" fill="#07080c"/>
+  <g stroke="#c9f24a" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M70 22 L112 39 V72 C112 97 94 113 70 121 C46 113 28 97 28 72 V39 Z" stroke-width="5"/>
+    <g stroke-width="6">
+      <path d="M50 65 V79"/>
+      <path d="M60 55 V89"/>
+      <path d="M70 46 V98"/>
+      <path d="M80 55 V89"/>
+      <path d="M90 65 V79"/>
+    </g>
+  </g>
+</svg>
