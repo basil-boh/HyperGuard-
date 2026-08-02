@@ -41,6 +41,135 @@ export interface UserProfile {
   is_app_user: boolean;
 }
 
+/** What `POST /api/auth/login` and `/register` return. */
+export interface AuthSession {
+  token: string;
+  expires_at: number | null;
+  user: { id: string; name: string };
+}
+
+/** The signed-in customer, from `GET /api/auth/me`. */
+export interface Me {
+  id: string;
+  name: string;
+  phone: string;
+  account_number: string;
+  balance: number;
+  currency: string;
+  age: number | null;
+  vulnerability_flags: string[];
+}
+
+// ── Guardian network ─────────────────────────────────────────────────────────
+export interface PersonBrief {
+  id: string;
+  name: string;
+  phone: string | null;
+  age: number | null;
+  vulnerability_flags: string[];
+}
+
+export type LinkStatus = "pending" | "active" | "declined" | "revoked";
+
+export interface GuardianLink {
+  id: string;
+  guardian_user_id: string;
+  guardian_name: string;
+  protected_user_id: string;
+  protected_name: string;
+  /** The guardian's relationship *to* the protected person, e.g. "son". */
+  relationship: string;
+  status: LinkStatus;
+  invited_by: "guardian" | "protected";
+  created_at: string;
+  responded_at: string | null;
+  guardian: PersonBrief;
+  protected: PersonBrief;
+  /** Present on "I'm protecting" rows only. */
+  incidents?: { total: number; unread: number };
+}
+
+export interface Network {
+  protecting: GuardianLink[];
+  guardians: GuardianLink[];
+  invitations: GuardianLink[];
+  invitations_sent: GuardianLink[];
+  unread_incidents: number;
+}
+
+export interface IncidentSummary {
+  id: string;
+  case_id: string;
+  protected_user_id: string;
+  protected_name: string;
+  guardian_user_id: string;
+  sent_at: string;
+  sent_by_user_id: string | null;
+  read_at: string | null;
+  unread: boolean;
+  note: string | null;
+  amount: number;
+  currency: string;
+  payee_name: string;
+  scam_title: string | null;
+  decision: string;
+  risk_score: number;
+}
+
+/** A SIMULATED authority filing — never a real report. See services/filing.py. */
+export interface AuthorityFiling {
+  case_id: string;
+  reference: string;
+  authority: string;
+  filed_by_user_id: string;
+  filed_at: string;
+  status: string;
+  timeline: { at: string; status: string; note: string }[];
+  simulated: boolean;
+  disclaimer: string;
+  real_channels: string[];
+}
+
+export interface IncidentDetail {
+  report: IncidentSummary;
+  protected: PersonBrief;
+  case: {
+    case_id: string;
+    user_name: string;
+    created_at: string;
+    amount: number;
+    currency: string;
+    payee_name: string;
+    decision: string;
+    status: string;
+    risk_score: number;
+    band: string;
+    scam_type: string | null;
+    scam_title: string | null;
+    escalated: boolean;
+    transaction: Record<string, any>;
+    risk_signals: { code: string; label: string; contribution: number; severity: string; detail: string }[];
+    rationale: string;
+    classification: Record<string, any> | null;
+    guardian_alerts: Record<string, any>[];
+    transcript: { index: number; speaker: string; text: string; ts: string; tags: string[] }[];
+    evidence: Record<string, any> | null;
+    narrative: string;
+  };
+  filing: AuthorityFiling | null;
+}
+
+/** A seeded test account, from `GET /api/auth/demo-accounts`. */
+export interface DemoAccount {
+  id: string;
+  name: string;
+  phone: string;
+  pin: string;
+  blurb: string;
+  account_number: string;
+  balance: number;
+}
+
 export interface Contact {
   id: string;
   name: string;

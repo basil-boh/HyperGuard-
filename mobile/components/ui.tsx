@@ -2,6 +2,7 @@ import React from "react";
 import {
   ActivityIndicator,
   Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   View,
@@ -31,7 +32,9 @@ export function Card({
   padded = true,
 }: {
   children: React.ReactNode;
-  style?: ViewStyle;
+  // StyleProp rather than ViewStyle so callers can pass a conditional array,
+  // e.g. [styles.card, unread && styles.unread].
+  style?: StyleProp<ViewStyle>;
   padded?: boolean;
 }) {
   return <View style={[styles.card, padded && { padding: 18 }, style]}>{children}</View>;

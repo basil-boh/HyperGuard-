@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.deps import current_account, current_user_id, repository
+from app.api.network import deliver_incident_report
 from app.config import get_settings
 from app.graph import get_orchestrator
 from app.services.baselines import derive_profile
@@ -104,7 +105,14 @@ async def add_contact(
     user_id: str = Depends(current_user_id),
     repo: WalletRepository = Depends(repository),
 ) -> dict:
-    return await repo.add_contact(user_id, body.name, body.phone, body.relationship)
+    contact = await repo.add_contact(user_id, body.name, body.phone, body.relationship)
+    # If this guardian already banks with HyperGuard, join the two accounts as well.
+    # No invitation is needed: consent belongs to the protected person, and they are
+    # the one making this request.
+    linked = await link_existing_guardian(
+        repo, protected_user_id=user_id, phone=body.phone, relationship=body.relationship
+    )
+    return {**contact, "linked_account": linked}
 
 
 @router.delete("/contacts/{contact_id}")
@@ -167,6 +175,14 @@ async def transfer(
             case = build_case_record(acc, txn, outcome, case_id)
             await repo.commit_transfer(user_id, acc, entry, case)
             registry.set_outcome(case_id, outcome)
+            # A blocked transfer is exactly what a guardian signed up to hear about,
+            # so the report goes out without waiting to be asked. Best-effort: a
+            # delivery failure must not lose the verdict.
+            if case.decision == "block":
+                try:
+                    await deliver_incident_report(repo, case)
+                except Exception as exc:  # pragma: no cover - defensive
+                    logger.warning("incident delivery for %s failed: %s", case_id, exc)
         except Exception as exc:  # pragma: no cover - defensive
             logger.exception("transfer %s failed: %s", case_id, exc)
 

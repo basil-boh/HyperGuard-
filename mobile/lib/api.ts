@@ -1,46 +1,107 @@
 import { API_BASE } from "./config";
-import { getUserId } from "./session";
+import { clearSession, getToken, getUserId } from "./session";
 import type {
+  AuthSession,
+  AuthorityFiling,
   Contact,
+  DemoAccount,
+  GuardianLink,
+  IncidentDetail,
+  IncidentSummary,
   InterventionPoll,
   LedgerEntry,
+  Me,
+  Network,
   Recipient,
   UserProfile,
   WalletSummary,
 } from "./types";
 
-async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  // Identify the active user to the backend (falls back to the demo user server-side).
-  const uid = await getUserId();
+/** Raised on a 401 so callers can distinguish "signed out" from a network failure. */
+export class UnauthorizedError extends Error {
+  constructor(message = "Session expired, please sign in again") {
+    super(message);
+    this.name = "UnauthorizedError";
+  }
+}
+
+/** Set by the root layout so a 401 anywhere bounces the app back to sign-in. */
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
+type ReqOptions = RequestInit & { anonymous?: boolean };
+
+async function req<T>(path: string, init?: ReqOptions): Promise<T> {
+  const { anonymous, ...rest } = init ?? {};
+  // Bearer token identifies the signed-in customer; X-User-Id rides along for
+  // back-compat with the pre-login backend contract.
+  const token = anonymous ? null : await getToken();
+  const uid = anonymous ? null : await getUserId();
+
   const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
+    ...rest,
     headers: {
       "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...(uid ? { "X-User-Id": uid } : {}),
-      ...(init?.headers ?? {}),
+      ...(rest.headers ?? {}),
     },
   });
+
   if (!res.ok) {
     let detail = `${res.status}`;
     try {
       detail = (await res.json()).detail ?? detail;
     } catch {}
+    if (res.status === 401 && !anonymous) {
+      await clearSession();
+      onUnauthorized?.();
+      throw new UnauthorizedError(detail);
+    }
     throw new Error(detail);
   }
   return res.json();
 }
 
 export const api = {
-  // identity
-  listUsers: () => req<UserProfile[]>("/api/users"),
-  createUser: (body: {
+  // auth
+  login: (body: { phone: string; pin: string }) =>
+    req<AuthSession>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(body),
+      anonymous: true,
+    }),
+
+  register: (body: {
     name: string;
     phone: string;
+    pin: string;
     age?: number;
-    vulnerability_flags?: string[];
-    home_country?: string;
     initial_balance?: number;
-  }) => req<UserProfile>("/api/users", { method: "POST", body: JSON.stringify(body) }),
+  }) =>
+    req<AuthSession & { profile: UserProfile }>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(body),
+      anonymous: true,
+    }),
+
+  /** Seeded phone/PIN pairs for the test-account picker; [] when the API hides them. */
+  demoAccounts: () =>
+    req<DemoAccount[]>("/api/auth/demo-accounts", { anonymous: true }).catch(
+      () => [] as DemoAccount[],
+    ),
+
+  me: () => req<Me>("/api/auth/me"),
+
+  changePin: (body: { current_pin: string; new_pin: string }) =>
+    req<{ updated: boolean }>("/api/auth/pin", { method: "POST", body: JSON.stringify(body) }),
+
+  logout: () => req<{ signed_out: boolean }>("/api/auth/logout", { method: "POST" }),
+
+  // identity
+  listUsers: () => req<UserProfile[]>("/api/users"),
 
   // wallet
   wallet: () => req<WalletSummary>("/api/wallet"),
@@ -61,6 +122,41 @@ export const api = {
 
   removeContact: (id: string) =>
     req<{ removed: string }>(`/api/wallet/contacts/${id}`, { method: "DELETE" }),
+
+  // guardian network
+  network: () => req<Network>("/api/network"),
+
+  /** Invite a relative to be protected — they must accept before anything is shared. */
+  protect: (body: { phone: string; relationship: string }) =>
+    req<GuardianLink>("/api/network/protect", { method: "POST", body: JSON.stringify(body) }),
+
+  respondToInvitation: (linkId: string, accept: boolean) =>
+    req<GuardianLink>(`/api/network/invitations/${linkId}/respond`, {
+      method: "POST",
+      body: JSON.stringify({ accept }),
+    }),
+
+  revokeLink: (linkId: string) =>
+    req<{ revoked: string }>(`/api/network/links/${linkId}`, { method: "DELETE" }),
+
+  // incident reports
+  incidents: () => req<IncidentSummary[]>("/api/incidents"),
+
+  incident: (reportId: string) => req<IncidentDetail>(`/api/incidents/${reportId}`),
+
+  /** Raise a SIMULATED authority filing. Nothing is sent to anyone. */
+  fileWithAuthorities: (reportId: string) =>
+    req<{ filing: AuthorityFiling; already_filed: boolean }>(
+      `/api/incidents/${reportId}/file`,
+      { method: "POST" },
+    ),
+
+  /** Send one of my own case reports to my guardians. */
+  sendReport: (body: { case_id: string; note?: string }) =>
+    req<{ case_id: string; delivered_to: { guardian_user_id: string; name: string; report_id: string }[] }>(
+      "/api/incidents/send",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 
   transfer: (body: {
     recipient_id?: string;

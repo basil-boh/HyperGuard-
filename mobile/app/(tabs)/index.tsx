@@ -24,8 +24,8 @@ export default function Home() {
         <View style={styles.header}>
           <ShieldLogo />
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <Pressable style={styles.switcher} onPress={() => router.push("/select-user")} hitSlop={8}>
-              <Ionicons name="people" size={16} color={color.muted} />
+            <Pressable style={styles.switcher} onPress={() => router.push("/account")} hitSlop={8}>
+              <Ionicons name="person-circle-outline" size={19} color={color.muted} />
             </Pressable>
             <Pressable style={styles.protected} onPress={() => router.push("/family")}>
               <Ionicons name="shield-checkmark" size={13} color={color.signal} />

@@ -169,12 +169,45 @@ The wallet opens on a sign-in screen: **phone number + 6-digit PIN**. The databa
 | `+6580000004` | `135791` | Priya Nair, 58 | Steady bills and school fees | Tech-support interception with a follow-up call |
 | `+6580000005` | `246810` | Siti Rahman, 29 | Gig worker, many small payouts | High velocity, low amounts |
 | `+6580000006` | `909090` | Robert Chen, 46 | SME owner, five-figure supplier runs | Big ≠ suspicious |
+| `+6580000010` | `321321` | Marcus Tan, 41 | **Guardian** — son to Alex and May | The guardian inbox, with incidents already on file |
+| `+6580000013` | `654654` | Linda Wong, 52 | **Guardian** — daughter to Wong | A second guardian, one unread incident |
 
 The contrast is the point: the *same* SGD 8,000 transfer is a 99% critical block for Wong and unremarkable for Robert. Each account carries its own balance, saved payees, guardians and 19–31 transactions of history, plus at least one hidden scam payee to transfer to.
 
 Credentials are served by `GET /api/auth/demo-accounts` and rendered in the app. Set `EXPOSE_DEMO_CREDENTIALS=false` to hide them, and `ALLOW_HEADER_USER_OVERRIDE=false` to require a real token (the legacy `X-User-Id` header is honoured by default so curl demos keep working).
 
 PINs are stored as PBKDF2-HMAC-SHA256 hashes, never in plain text; sessions are stateless HMAC-signed bearer tokens. Repeated failures lock a phone number out for 60 seconds.
+
+### The guardian network
+
+The hardest part of protecting someone from a scam is that the person best placed to help — their son, their daughter — finds out afterwards, if at all. The **Network** tab makes that relationship a first-class object rather than a phone number in a settings screen.
+
+A guardian adds a relative by phone number, and **the relative decides**: the invitation sits pending until they accept, and nothing about their account is visible until they do. Accepting does three things at once — the guardian appears on the account's alert list so the swarm can reach them mid-intervention, every blocked case already on file is delivered to their inbox, and future ones arrive automatically. Either side can revoke at any time; the link is kept, marked revoked, so past access stays auditable.
+
+The relationship also builds from the other direction: adding a trusted contact whose phone already belongs to a HyperGuard account links the two immediately, because the person whose consent matters is the one doing the adding.
+
+```mermaid
+flowchart LR
+    G["Guardian<br/>invites by phone"] -->|pending| P["Relative<br/>accepts or declines"]
+    P -->|accepted| L["Link active"]
+    L --> A["On the swarm's<br/>alert list"]
+    L --> H["History<br/>backfilled"]
+    B["Transfer blocked"] --> R["Incident report<br/>→ guardian's inbox"]
+    R --> F["Alert authorities<br/>(SIMULATED)"]
+
+    classDef base fill:#07080c,stroke:#2a2f26,stroke-width:1px,color:#d7dfc8
+    classDef good fill:#0c1408,stroke:#c9f24a,stroke-width:1.5px,color:#c9f24a
+    classDef warn fill:#171207,stroke:#ffc24b,stroke-width:1.5px,color:#ffc24b
+    class G,P,B base
+    class L,A,H,R good
+    class F warn
+```
+
+An incident report is the whole account of what happened — the risk signals that fired, the call transcript, the scam pattern, the guardian actions, the verdict — read live from the case, so it can never drift from the record.
+
+**On the authorities filing.** The "Alert authorities" action is a **simulation**, and the code goes out of its way to keep it impossible to mistake for anything else: every reference is prefixed `SIM-`, every payload carries `simulated: true` plus a disclaimer naming the real channel (ScamShield, 1799), the status timeline stops at *referred* and never invents an outcome like funds recovered or an arrest, and `services/filing.py` has no network access of any kind. HyperGuard is not connected to the police, the National Anti-Scam Centre, or any other body. If you later wire up a real integration, that module is the seam — and the labelling should be the last thing removed, not the first.
+
+Seeded so the network is populated on first load: Marcus watches Alex and May with two of May's incidents in his inbox (one unread, one already filed), Linda watches her father, and a pending invitation from Marcus to Wong Ah Kow is waiting so the accept flow can be demonstrated on a single device.
 
 ### Keys, and what happens without them
 

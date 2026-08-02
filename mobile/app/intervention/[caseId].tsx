@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,6 +7,7 @@ import { Button, Card, Kicker } from "@/components/ui";
 import { AgentRelay } from "@/components/AgentRelay";
 import { RiskGauge } from "@/components/RiskGauge";
 import { Transcript } from "@/components/Transcript";
+import { api } from "@/lib/api";
 import { useIntervention } from "@/lib/useIntervention";
 import { pct } from "@/lib/format";
 import { color, font, radius } from "@/lib/theme";
@@ -174,7 +175,10 @@ export default function Intervention() {
               </View>
               <View style={[styles.escRow, { marginTop: 10 }]}>
                 <Ionicons name="document-text" size={16} color={color.signal} />
-                <Text style={styles.escText}>Incident report filed with authorities</Text>
+                <Text style={styles.escText}>
+                  Incident report prepared for the authorities{" "}
+                  <Text style={styles.simTag}>(simulated)</Text>
+                </Text>
               </View>
             </Card>
             {v.report && (
@@ -192,6 +196,9 @@ export default function Intervention() {
             <Verdict decision={v.decision} narrative={v.narrative} />
           </View>
         )}
+
+        {/* Share what happened with the people watching over this account */}
+        {v.done && v.decision === "block" && <ShareWithGuardians caseId={caseId} />}
       </ScrollView>
 
       {v.done && (
@@ -204,6 +211,63 @@ export default function Intervention() {
         </View>
       )}
     </SafeAreaView>
+  );
+}
+
+/**
+ * Blocked cases are delivered to active guardians automatically, so this is the
+ * "tell them again, with a note" affordance — and the way to reach guardians added
+ * after the fact.
+ */
+function ShareWithGuardians({ caseId }: { caseId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [sentTo, setSentTo] = useState<string[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.sendReport({ case_id: caseId });
+      setSentTo(result.delivered_to.map((d) => d.name));
+    } catch (e: any) {
+      setError(e?.message ?? "Couldn't send the report.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Text style={styles.section}>Share with your guardians</Text>
+      <Card style={{ gap: 12 }}>
+        {sentTo ? (
+          <View style={styles.escRow}>
+            <Ionicons name="checkmark-circle" size={17} color={color.signal} />
+            <Text style={styles.escText}>
+              {sentTo.length > 0
+                ? `Sent to ${sentTo.join(", ")}.`
+                : "Sent."}
+            </Text>
+          </View>
+        ) : (
+          <>
+            <Text style={styles.reportText}>
+              Send the full account of what happened — the risk signals, the call, and the
+              scam pattern — to the people who look out for you.
+            </Text>
+            <Button
+              label="Send incident report"
+              icon="paper-plane"
+              variant="ghost"
+              onPress={send}
+              loading={busy}
+            />
+            {error ? <Text style={styles.shareError}>{error}</Text> : null}
+          </>
+        )}
+      </Card>
+    </>
   );
 }
 
@@ -265,6 +329,8 @@ const styles = StyleSheet.create({
   guidanceText: { color: color.ink, fontSize: 13.5, lineHeight: 20 },
   guardianIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: color.ice + "1a", alignItems: "center", justifyContent: "center" },
   guardianName: { color: color.ink, fontSize: 15, fontWeight: font.semi },
+  simTag: { color: color.amber, fontSize: 12 },
+  shareError: { color: color.crimson, fontSize: 12.5, lineHeight: 18 },
   guardianMeta: { color: color.faint, fontSize: 12.5, marginTop: 2, textTransform: "capitalize" },
   ackTag: { borderRadius: radius.pill, backgroundColor: color.signalSoft, paddingHorizontal: 9, paddingVertical: 4 },
   ackText: { color: color.signal, fontSize: 10.5, fontWeight: font.bold, textTransform: "uppercase" },

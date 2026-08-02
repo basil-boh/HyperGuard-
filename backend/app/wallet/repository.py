@@ -30,6 +30,17 @@ from app.schemas import (
     TransactionRequest,
     TrustedContact,
 )
+from app.wallet.network import (
+    AuthorityFiling,
+    GuardianLink,
+    IncidentReport,
+    filing_to_row,
+    link_to_row,
+    report_to_row,
+    row_to_filing,
+    row_to_link,
+    row_to_report,
+)
 from app.wallet.store import (
     Account,
     Bank,
@@ -44,6 +55,22 @@ logger = logging.getLogger("hyperguard.repository")
 
 _NEW_USER_AVG = 200.0
 _NEW_USER_STD = 400.0
+
+_PIN_MIGRATION = "alter table users add column if not exists pin_hash text;"
+
+
+class CredentialStoreUnavailable(RuntimeError):
+    """The credential column hasn't been migrated yet.
+
+    Raised instead of letting PostgREST's "column does not exist" surface as an
+    opaque 500, because the fix is one statement and the operator should be told it.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Sign-in is not set up on this database yet. Run this once in the "
+            f"Supabase SQL editor, then restart the API:\n\n    {_PIN_MIGRATION}"
+        )
 
 
 def _new_account_number() -> str:
@@ -69,10 +96,19 @@ class WalletRepository(ABC):
         vulnerability_flags: list[str] | None = None,
         home_country: str = "SG",
         initial_balance: float = 1000.0,
+        pin_hash: str | None = None,
     ) -> dict: ...
 
     @abstractmethod
     async def get_account(self, user_id: str) -> Account | None: ...
+
+    # credentials
+    @abstractmethod
+    async def get_credentials(self, phone: str) -> dict | None:
+        """`{"id", "name", "pin_hash"}` for the account owning `phone`, else None."""
+
+    @abstractmethod
+    async def set_pin(self, user_id: str, pin_hash: str) -> bool: ...
 
     # mutations
     @abstractmethod
@@ -101,6 +137,53 @@ class WalletRepository(ABC):
         guardian_alerts: list | None = None, classification: dict | None = None,
     ) -> None: ...
 
+    # guardian network
+    @abstractmethod
+    async def get_user_brief(self, user_ids: list[str]) -> dict[str, dict]:
+        """`{id: {name, phone, age, vulnerability_flags}}` — enough to render a
+        network row without loading each account's ledger."""
+
+    @abstractmethod
+    async def get_link(self, link_id: str) -> GuardianLink | None: ...
+
+    @abstractmethod
+    async def find_link(
+        self, guardian_user_id: str, protected_user_id: str
+    ) -> GuardianLink | None: ...
+
+    @abstractmethod
+    async def get_links_as_guardian(
+        self, user_id: str, *, status: str | None = None
+    ) -> list[GuardianLink]: ...
+
+    @abstractmethod
+    async def get_links_as_protected(
+        self, user_id: str, *, status: str | None = None
+    ) -> list[GuardianLink]: ...
+
+    @abstractmethod
+    async def save_link(self, link: GuardianLink) -> None: ...
+
+    # incident reports
+    @abstractmethod
+    async def get_incident(self, report_id: str) -> IncidentReport | None: ...
+
+    @abstractmethod
+    async def get_incidents_for_guardian(self, user_id: str) -> list[IncidentReport]: ...
+
+    @abstractmethod
+    async def get_incidents_for_case(self, case_id: str) -> list[IncidentReport]: ...
+
+    @abstractmethod
+    async def save_incident(self, report: IncidentReport) -> None: ...
+
+    # simulated authority filings
+    @abstractmethod
+    async def get_filing(self, case_id: str) -> AuthorityFiling | None: ...
+
+    @abstractmethod
+    async def save_filing(self, filing: AuthorityFiling) -> None: ...
+
     # admin aggregates
     @abstractmethod
     async def load_bank(self) -> Bank: ...
@@ -122,7 +205,7 @@ class InMemoryRepository(WalletRepository):
 
     async def create_profile(
         self, *, name, phone, age=None, vulnerability_flags=None,
-        home_country="SG", initial_balance=1000.0,
+        home_country="SG", initial_balance=1000.0, pin_hash=None,
     ) -> dict:
         uid = f"acc_{uuid4().hex[:8]}"
         owner = CustomerProfile(
@@ -132,12 +215,25 @@ class InMemoryRepository(WalletRepository):
             home_country=home_country,
         )
         acc = Account(owner, account_number=_new_account_number(),
-                      balance=float(initial_balance), recipients=[])
+                      balance=float(initial_balance), recipients=[], pin_hash=pin_hash)
         self._bank.accounts[uid] = acc
         return _profile_summary(acc, self._bank.APP_USER)
 
     async def get_account(self, user_id: str) -> Account | None:
         return self._bank.account(user_id)
+
+    async def get_credentials(self, phone: str) -> dict | None:
+        acc = self._bank.account_by_phone(phone)
+        if acc is None:
+            return None
+        return {"id": acc.owner.id, "name": acc.owner.name, "pin_hash": acc.pin_hash}
+
+    async def set_pin(self, user_id: str, pin_hash: str) -> bool:
+        acc = self._bank.account(user_id)
+        if acc is None:
+            return False
+        acc.pin_hash = pin_hash
+        return True
 
     async def add_recipient(self, user_id, name, account, bank, phone, country) -> dict:
         acc = self._require(user_id)
@@ -167,6 +263,48 @@ class InMemoryRepository(WalletRepository):
                 case.classification = classification
                 case.scam_type = classification.get("archetype")
         return None
+
+    # -- guardian network -------------------------------------------------------
+    async def get_user_brief(self, user_ids: list[str]) -> dict[str, dict]:
+        briefs = {}
+        for uid in set(user_ids):
+            acc = self._bank.account(uid)
+            if acc is not None:
+                briefs[uid] = _brief(acc.owner)
+        return briefs
+
+    async def get_link(self, link_id: str) -> GuardianLink | None:
+        return self._bank.link(link_id)
+
+    async def find_link(self, guardian_user_id, protected_user_id) -> GuardianLink | None:
+        return self._bank.find_link(guardian_user_id, protected_user_id)
+
+    async def get_links_as_guardian(self, user_id, *, status=None) -> list[GuardianLink]:
+        return self._bank.links_as_guardian(user_id, status=status)
+
+    async def get_links_as_protected(self, user_id, *, status=None) -> list[GuardianLink]:
+        return self._bank.links_as_protected(user_id, status=status)
+
+    async def save_link(self, link: GuardianLink) -> None:
+        self._bank.links[link.id] = link
+
+    async def get_incident(self, report_id: str) -> IncidentReport | None:
+        return self._bank.incidents.get(report_id)
+
+    async def get_incidents_for_guardian(self, user_id: str) -> list[IncidentReport]:
+        return self._bank.incidents_for_guardian(user_id)
+
+    async def get_incidents_for_case(self, case_id: str) -> list[IncidentReport]:
+        return self._bank.incidents_for_case(case_id)
+
+    async def save_incident(self, report: IncidentReport) -> None:
+        self._bank.incidents[report.id] = report
+
+    async def get_filing(self, case_id: str) -> AuthorityFiling | None:
+        return self._bank.filing(case_id)
+
+    async def save_filing(self, filing: AuthorityFiling) -> None:
+        self._bank.filings[filing.case_id] = filing
 
     async def load_bank(self) -> Bank:
         return self._bank
@@ -224,7 +362,22 @@ class SupabaseRepository(WalletRepository):
             contacts = c.table("contacts").select("*").execute().data
             txns = c.table("transactions").select("*").execute().data
             cases = c.table("cases").select("*").execute().data
-            return _hydrate_bank(users, rcps, contacts, txns, cases)
+            bank = _hydrate_bank(users, rcps, contacts, txns, cases)
+            # The network tables post-date the base schema; a database that hasn't
+            # been migrated yet should still serve wallet and console reads.
+            try:
+                for row in c.table("guardian_links").select("*").execute().data:
+                    link = row_to_link(row)
+                    bank.links[link.id] = link
+                for row in c.table("incident_reports").select("*").execute().data:
+                    report = row_to_report(row)
+                    bank.incidents[report.id] = report
+                for row in c.table("authority_filings").select("*").execute().data:
+                    filing = row_to_filing(row)
+                    bank.filings[filing.case_id] = filing
+            except Exception as exc:  # pragma: no cover - pre-migration database
+                logger.warning("guardian network tables not loaded (run the migration): %s", exc)
+            return bank
 
         return await asyncio.to_thread(_q)
 
@@ -236,10 +389,168 @@ class SupabaseRepository(WalletRepository):
 
         return await asyncio.to_thread(_q)
 
+    async def get_credentials(self, phone: str) -> dict | None:
+        # Phones are stored normalised (see `create_profile` and the seed), so an
+        # equality match on the normalised input is exact.
+        from app.services.auth import normalize_phone
+
+        wanted = normalize_phone(phone)
+        if not wanted:
+            return None
+
+        def _q():
+            try:
+                rows = (
+                    self._connect().table("users")
+                    .select("id,name,pin_hash").eq("phone", wanted).limit(1).execute().data
+                )
+            except Exception as exc:
+                if "pin_hash" in str(exc):
+                    raise CredentialStoreUnavailable() from exc
+                raise
+            return rows[0] if rows else None
+
+        return await asyncio.to_thread(_q)
+
+    # -- guardian network -------------------------------------------------------
+    async def get_user_brief(self, user_ids: list[str]) -> dict[str, dict]:
+        wanted = list(set(user_ids))
+        if not wanted:
+            return {}
+
+        def _q():
+            rows = (
+                self._connect().table("users")
+                .select("id,name,phone,age,vulnerability_flags")
+                .in_("id", wanted).execute().data
+            )
+            return {
+                r["id"]: {
+                    "id": r["id"], "name": r["name"], "phone": r.get("phone"),
+                    "age": r.get("age"),
+                    "vulnerability_flags": r.get("vulnerability_flags") or [],
+                }
+                for r in rows
+            }
+
+        return await asyncio.to_thread(_q)
+
+    async def get_link(self, link_id: str) -> GuardianLink | None:
+        def _q():
+            rows = (
+                self._connect().table("guardian_links")
+                .select("*").eq("id", link_id).limit(1).execute().data
+            )
+            return row_to_link(rows[0]) if rows else None
+
+        return await asyncio.to_thread(_q)
+
+    async def find_link(self, guardian_user_id, protected_user_id) -> GuardianLink | None:
+        def _q():
+            rows = (
+                self._connect().table("guardian_links").select("*")
+                .eq("guardian_user_id", guardian_user_id)
+                .eq("protected_user_id", protected_user_id)
+                .limit(1).execute().data
+            )
+            return row_to_link(rows[0]) if rows else None
+
+        return await asyncio.to_thread(_q)
+
+    async def get_links_as_guardian(self, user_id, *, status=None) -> list[GuardianLink]:
+        return await self._links_by("guardian_user_id", user_id, status)
+
+    async def get_links_as_protected(self, user_id, *, status=None) -> list[GuardianLink]:
+        return await self._links_by("protected_user_id", user_id, status)
+
+    async def _links_by(self, column: str, user_id: str, status: str | None) -> list[GuardianLink]:
+        def _q():
+            query = self._connect().table("guardian_links").select("*").eq(column, user_id)
+            if status:
+                query = query.eq("status", status)
+            rows = query.order("created_at", desc=True).execute().data
+            return [row_to_link(r) for r in rows]
+
+        return await asyncio.to_thread(_q)
+
+    async def save_link(self, link: GuardianLink) -> None:
+        row = link_to_row(link)
+
+        def _w():
+            self._connect().table("guardian_links").upsert(row).execute()
+
+        await asyncio.to_thread(_w)
+
+    async def get_incident(self, report_id: str) -> IncidentReport | None:
+        def _q():
+            rows = (
+                self._connect().table("incident_reports")
+                .select("*").eq("id", report_id).limit(1).execute().data
+            )
+            return row_to_report(rows[0]) if rows else None
+
+        return await asyncio.to_thread(_q)
+
+    async def get_incidents_for_guardian(self, user_id: str) -> list[IncidentReport]:
+        def _q():
+            rows = (
+                self._connect().table("incident_reports").select("*")
+                .eq("guardian_user_id", user_id).order("sent_at", desc=True).execute().data
+            )
+            return [row_to_report(r) for r in rows]
+
+        return await asyncio.to_thread(_q)
+
+    async def get_incidents_for_case(self, case_id: str) -> list[IncidentReport]:
+        def _q():
+            rows = (
+                self._connect().table("incident_reports").select("*")
+                .eq("case_id", case_id).execute().data
+            )
+            return [row_to_report(r) for r in rows]
+
+        return await asyncio.to_thread(_q)
+
+    async def save_incident(self, report: IncidentReport) -> None:
+        row = report_to_row(report)
+
+        def _w():
+            self._connect().table("incident_reports").upsert(row).execute()
+
+        await asyncio.to_thread(_w)
+
+    async def get_filing(self, case_id: str) -> AuthorityFiling | None:
+        def _q():
+            rows = (
+                self._connect().table("authority_filings")
+                .select("*").eq("case_id", case_id).limit(1).execute().data
+            )
+            return row_to_filing(rows[0]) if rows else None
+
+        return await asyncio.to_thread(_q)
+
+    async def save_filing(self, filing: AuthorityFiling) -> None:
+        row = filing_to_row(filing)
+
+        def _w():
+            self._connect().table("authority_filings").upsert(row).execute()
+
+        await asyncio.to_thread(_w)
+
     # -- writes -----------------------------------------------------------------
+    async def set_pin(self, user_id: str, pin_hash: str) -> bool:
+        def _w():
+            res = (
+                self._connect().table("users")
+                .update({"pin_hash": pin_hash}).eq("id", user_id).execute()
+            )
+            return bool(res.data)
+
+        return await asyncio.to_thread(_w)
+
     async def create_profile(
         self, *, name, phone, age=None, vulnerability_flags=None,
-        home_country="SG", initial_balance=1000.0,
+        home_country="SG", initial_balance=1000.0, pin_hash=None,
     ) -> dict:
         uid = f"acc_{uuid4().hex[:8]}"
         account_number = _new_account_number()
@@ -249,6 +560,7 @@ class SupabaseRepository(WalletRepository):
             "home_country": home_country, "account_number": account_number,
             "currency": "SGD", "balance": float(initial_balance),
             "is_app_user": False, "known_payees": [], "known_payee_phones": [],
+            "pin_hash": pin_hash,
         }
 
         def _w():
@@ -373,6 +685,17 @@ def _parse_ts(value) -> datetime:
     return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
 
+def _brief(owner: CustomerProfile) -> dict:
+    """The subset of a profile the guardian network renders — never credentials."""
+    return {
+        "id": owner.id,
+        "name": owner.name,
+        "phone": owner.phone,
+        "age": owner.age,
+        "vulnerability_flags": list(owner.vulnerability_flags),
+    }
+
+
 def _profile_summary(acc: Account, app_user_id: str) -> dict:
     return {
         "id": acc.owner.id, "name": acc.owner.name, "phone": acc.owner.phone,
@@ -411,6 +734,7 @@ def _hydrate_account(u: dict, rcps: list[dict], contacts: list[dict], txns: list
             )
             for r in rcps
         ],
+        pin_hash=u.get("pin_hash"),
     )
     acc.ledger = [
         LedgerEntry(

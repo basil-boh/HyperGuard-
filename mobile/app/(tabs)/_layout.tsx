@@ -29,7 +29,7 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="family"
-        options={{ title: "Guardians", tabBarIcon: ({ color: c, size }) => <Ionicons name="shield-half" size={size} color={c} /> }}
+        options={{ title: "Network", tabBarIcon: ({ color: c, size }) => <Ionicons name="people-circle" size={size} color={c} /> }}
       />
     </Tabs>
   );

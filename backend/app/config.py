@@ -8,6 +8,7 @@ The `*_enabled` properties are the single source of truth for that capability ga
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from typing import Annotated
 
@@ -56,6 +57,19 @@ class Settings(BaseSettings):
     # rather than using lenient cold-start defaults.
     baseline_min_transactions: int = 5
 
+    # ── Auth ───────────────────────────────────────────────────────────────────
+    # HMAC key for session tokens. Unset is fine for local work (a fixed dev key is
+    # used and a warning logged); set it in any deployed environment, or every
+    # restart with a different key would sign customers out.
+    auth_secret: str | None = None
+    auth_token_ttl_hours: int = 24 * 30
+    # Serve the seeded phone/PIN pairs from GET /api/auth/demo-accounts and show them
+    # on the sign-in screen. Intended for testing; turn off for a public deployment.
+    expose_demo_credentials: bool = True
+    # Accept the legacy `X-User-Id` header as identity when no bearer token is sent.
+    # Keeps pre-login clients and curl-driven demos working; disable to require login.
+    allow_header_user_override: bool = True
+
     # ── LLM ────────────────────────────────────────────────────────────────────
     openai_api_key: str | None = None
     llm_model: str = "gpt-5.5"
@@ -95,6 +109,23 @@ class Settings(BaseSettings):
         return value
 
     # ── Capability gates ───────────────────────────────────────────────────────
+    @property
+    def auth_signing_key(self) -> str:
+        """The key session tokens are signed with.
+
+        Falls back to a fixed development key so the app runs out of the box; the
+        warning is the nudge to set AUTH_SECRET before anything ships.
+        """
+        if self.auth_secret:
+            return self.auth_secret
+        if self.environment.lower() not in {"development", "test", "local"}:
+            logging.getLogger("hyperguard.auth").warning(
+                "AUTH_SECRET is unset in environment=%s — session tokens are signed "
+                "with the public development key.",
+                self.environment,
+            )
+        return "hyperguard-dev-signing-key-do-not-use-in-production"
+
     @property
     def llm_enabled(self) -> bool:
         return bool(self.openai_api_key) and not self.force_demo_mode
