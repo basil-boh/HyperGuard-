@@ -1,19 +1,9 @@
 import React, { useEffect, useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar, Button, Kicker } from "@/components/ui";
+import { FormScaffold } from "@/components/FormScaffold";
 import { api } from "@/lib/api";
 import { color, font, radius } from "@/lib/theme";
 import type { Recipient } from "@/lib/types";
@@ -58,17 +48,20 @@ export default function Transfer() {
     r.phone ? `PayNow · ${r.phone}` : `${r.bank} · ${r.account}`;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Ionicons name="close" size={26} color={color.muted} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Send money</Text>
-        <View style={{ width: 26 }} />
-      </View>
-
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
+    <FormScaffold
+      header={
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} hitSlop={12}>
+            <Ionicons name="close" size={26} color={color.muted} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Send money</Text>
+          <View style={{ width: 26 }} />
+        </View>
+      }
+      footer={
+        <Button label={busy ? "Reviewing…" : "Send securely"} icon="lock-closed" onPress={send} loading={busy} disabled={!valid} />
+      }
+    >
           <Kicker>Amount</Kicker>
           <View style={styles.amountRow}>
             <Text style={styles.currency}>SGD</Text>
@@ -159,18 +152,11 @@ export default function Transfer() {
             <Ionicons name="shield-checkmark" size={15} color={color.signal} />
             <Text style={styles.guardText}>HyperGuard reviews this transfer before any money moves.</Text>
           </View>
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <Button label={busy ? "Reviewing…" : "Send securely"} icon="lock-closed" onPress={send} loading={busy} disabled={!valid} />
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    </FormScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: color.void },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 14 },
   headerTitle: { color: color.ink, fontSize: 16, fontWeight: font.bold },
   amountRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8, marginBottom: 14 },
@@ -190,5 +176,4 @@ const styles = StyleSheet.create({
   memo: { marginTop: 10, color: color.ink, fontSize: 15, backgroundColor: color.surface, borderRadius: radius.md, borderWidth: 1, borderColor: color.hairline, padding: 14 },
   guard: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 22 },
   guardText: { color: color.faint, fontSize: 12.5, flex: 1, lineHeight: 17 },
-  footer: { padding: 20, borderTopWidth: 1, borderTopColor: color.hairline },
 });

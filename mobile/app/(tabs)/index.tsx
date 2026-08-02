@@ -50,6 +50,15 @@ export default function Home() {
           <Text style={styles.balance}>
             {summary ? money(summary.balance, summary.currency) : "—"}
           </Text>
+          {summary?.transfer_limit ? (
+            <View style={styles.limitBadge}>
+              <Ionicons name="lock-closed" size={12} color={color.ice} />
+              <Text style={styles.limitBadgeText}>
+                {money(summary.transfer_limit.amount, summary.currency)} per transfer ·
+                set by {summary.transfer_limit.set_by}
+              </Text>
+            </View>
+          ) : null}
         </LinearGradient>
 
         {/* Actions */}
@@ -143,6 +152,20 @@ const styles = StyleSheet.create({
   account: { color: color.faint, fontSize: 13, marginTop: 2, fontVariant: ["tabular-nums"] },
   balanceLabel: { color: color.muted, fontSize: 12.5, marginTop: 22 },
   balance: { color: color.ink, fontSize: 36, fontWeight: font.black, letterSpacing: -1, marginTop: 4, fontVariant: ["tabular-nums"] },
+  limitBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    marginTop: 14,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: color.ice + "44",
+    backgroundColor: color.ice + "14",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  limitBadgeText: { color: color.ice, fontSize: 11.5, fontWeight: font.medium },
   actions: { flexDirection: "row", gap: 12, marginTop: 18 },
   protCard: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 18 },
   protIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: color.signalSoft, alignItems: "center", justifyContent: "center" },

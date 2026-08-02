@@ -72,9 +72,23 @@ class Settings(BaseSettings):
 
     # ── LLM ────────────────────────────────────────────────────────────────────
     openai_api_key: str | None = None
+    # Legacy single-model setting. Still honoured as the fallback for both tiers so
+    # an existing .env keeps working unchanged.
     llm_model: str = "gpt-5.5"
+    # Tiered models (see services/model_policy). Routine work — the negotiator's
+    # in-call lines on an unescalated case — runs on the fast model; a confirmed scam
+    # or a hard-block-level risk promotes to the deep one, as do the written outputs.
+    llm_model_fast: str = "gpt-5.5-mini"
+    llm_model_deep: str | None = None  # falls back to llm_model
     llm_temperature: float = 0.2
     llm_timeout_seconds: float = 30.0
+    # Optional USD per 1M tokens, used only to turn recorded token counts into a cost
+    # estimate. Left unset, the API reports tokens and latency but never dollars —
+    # a guessed price is worse than no price.
+    llm_price_fast_input: float = 0.0
+    llm_price_fast_output: float = 0.0
+    llm_price_deep_input: float = 0.0
+    llm_price_deep_output: float = 0.0
 
     # ── Voice / telephony ──────────────────────────────────────────────────────
     twilio_account_sid: str | None = None
@@ -125,6 +139,12 @@ class Settings(BaseSettings):
                 self.environment,
             )
         return "hyperguard-dev-signing-key-do-not-use-in-production"
+
+    def model_for(self, tier: str) -> str:
+        """Resolve a policy tier to a concrete model id."""
+        if tier == "deep":
+            return self.llm_model_deep or self.llm_model
+        return self.llm_model_fast or self.llm_model
 
     @property
     def llm_enabled(self) -> bool:

@@ -28,6 +28,7 @@ from app.agents.negotiator import VoiceNegotiator
 from app.agents.recovery import RecoveryCoordinator
 from app.domain.events import EventType, SwarmEvent
 from app.runtime import Runtime
+from app.services.model_policy import get_usage
 from app.schemas import (
     CustomerProfile,
     Decision,
@@ -132,6 +133,12 @@ class SwarmOrchestrator:
         if txn.status == TransactionStatus.pending:
             txn.status = TransactionStatus.intervening
 
+        # Account for every model call this case makes, so the tiering saving is
+        # measurable rather than asserted. Shared with the voice follow-up, which
+        # runs after the graph closes and adds the deep-tier written outputs.
+        usage = get_usage(case_id)
+        self.rt.negotiator.track(usage)
+
         await self.rt.bus.publish(
             SwarmEvent(
                 type=EventType.case_opened,
@@ -163,7 +170,10 @@ class SwarmOrchestrator:
             SwarmEvent(
                 type=EventType.case_closed,
                 case_id=case_id,
-                payload={"outcome": outcome.model_dump(mode="json")},
+                payload={
+                    "outcome": outcome.model_dump(mode="json"),
+                    "model_usage": usage.summary(self.rt.settings),
+                },
             )
         )
         return outcome

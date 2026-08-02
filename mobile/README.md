@@ -98,6 +98,18 @@ The two-device demo, in full:
 A pending invitation from Marcus to Wong is already seeded, so steps 1–2 can be
 skipped if you only have one device.
 
+### Transfer limits
+
+From **Network → (someone you protect) → Transfer limit**, a guardian can cap what
+that person sends in a single transfer. Sign in as Marcus, cap May at SGD 500, then
+sign in as May and try to send 2,500 — it's refused before the swarm even runs, with
+a message naming who set the limit.
+
+Only the guardian can change it, on purpose: a limit the victim can raise mid-call is
+a limit a scammer can talk them through raising. May sees the cap on her balance card
+and next to Marcus's name in her Network tab, and can remove him as a guardian if she
+disagrees. Where several guardians set one, the lowest wins.
+
 ## Structure
 
 ```

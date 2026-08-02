@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 
 from app.services.llm import LLMClient
+from app.services.model_policy import DEEP, ModelUsage
 
 logger = logging.getLogger("hyperguard.reasoning")
 
@@ -80,7 +81,7 @@ def _heuristic(transaction: dict, risk: dict, answers: list[dict]) -> dict:
 
 async def assess(
     llm: LLMClient, *, transaction: dict, risk: dict, classification: dict | None,
-    answers: list[dict],
+    answers: list[dict], usage: ModelUsage | None = None,
 ) -> dict:
     fallback = _heuristic(transaction, risk, answers)
     if not llm.enabled or not answers:
@@ -97,7 +98,11 @@ async def assess(
         f"Suspected pattern: {pattern or 'unclassified'}.\n\n"
         f"Verification call answers:\n{qa}\n\nAssess this transfer."
     )
-    out = await llm.complete_json(_ASSESS_SYSTEM, user)
+    # Deep tier: this verdict decides whether a family member is woken up, and the
+    # call is already over, so there is no latency to protect.
+    out = await llm.complete_json(
+        _ASSESS_SYSTEM, user, tier=DEEP, purpose="assessment", usage=usage
+    )
     if not out:
         return fallback
 
@@ -146,7 +151,7 @@ def _fallback_report(case_id, customer, transaction, risk, answers, assessment) 
 
 async def incident_report(
     llm: LLMClient, *, case_id: str, customer: dict, transaction: dict, risk: dict,
-    answers: list[dict], assessment: dict,
+    answers: list[dict], assessment: dict, usage: ModelUsage | None = None,
 ) -> str:
     fallback = _fallback_report(case_id, customer, transaction, risk, answers, assessment)
     if not llm.enabled:
@@ -162,5 +167,7 @@ async def incident_report(
         f"Assessment: {assessment.get('reasoning')} (likelihood {assessment.get('scam_likelihood')}).\n"
         f"Call answers:\n{qa}\n\nWrite the incident report."
     )
-    out = await llm.complete_text(_REPORT_SYSTEM, user)
+    out = await llm.complete_text(
+        _REPORT_SYSTEM, user, tier=DEEP, purpose="incident_report", usage=usage
+    )
     return out or fallback

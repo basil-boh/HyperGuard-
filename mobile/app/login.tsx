@@ -1,19 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, Kicker, ShieldLogo } from "@/components/ui";
+import { FormScaffold } from "@/components/FormScaffold";
 import { api } from "@/lib/api";
 import { setSession } from "@/lib/session";
 import { color, font, radius } from "@/lib/theme";
@@ -83,16 +73,7 @@ export default function Login() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={{ padding: 24, paddingTop: 40, flexGrow: 1 }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+    <FormScaffold contentStyle={{ padding: 24, paddingTop: 40 }}>
           <ShieldLogo size={30} />
           <Text style={styles.title}>Welcome back</Text>
           <Text style={styles.sub}>
@@ -230,14 +211,11 @@ export default function Login() {
               )}
             </View>
           ) : null}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    </FormScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: color.void },
   title: {
     color: color.ink,
     fontSize: 30,

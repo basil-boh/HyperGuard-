@@ -59,6 +59,11 @@ class GuardianLink:
     invited_by: str = BY_GUARDIAN
     created_at: datetime = field(default_factory=_now)
     responded_at: datetime | None = None
+    # Per-transfer ceiling this guardian set on the protected account, in the
+    # account's own currency. None means they haven't set one. Enforced in the
+    # wallet's transfer route; the *lowest* limit across a person's active
+    # guardians wins, so adding a guardian can only ever tighten protection.
+    transfer_limit: float | None = None
 
     @property
     def is_active(self) -> bool:
@@ -76,6 +81,7 @@ class GuardianLink:
             "invited_by": self.invited_by,
             "created_at": _iso(self.created_at),
             "responded_at": _iso(self.responded_at),
+            "transfer_limit": self.transfer_limit,
         }
 
 
@@ -191,6 +197,7 @@ def link_to_row(link: GuardianLink) -> dict:
         "invited_by": link.invited_by,
         "created_at": _iso(link.created_at),
         "responded_at": _iso(link.responded_at),
+        "transfer_limit": link.transfer_limit,
     }
 
 
@@ -204,6 +211,9 @@ def row_to_link(row: dict) -> GuardianLink:
         invited_by=row.get("invited_by") or BY_GUARDIAN,
         created_at=_parse(row.get("created_at")) or _now(),
         responded_at=_parse(row.get("responded_at")),
+        transfer_limit=(
+            float(row["transfer_limit"]) if row.get("transfer_limit") is not None else None
+        ),
     )
 
 

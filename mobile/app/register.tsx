@@ -1,18 +1,9 @@
 import React, { useRef, useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, Kicker, ShieldLogo } from "@/components/ui";
+import { FormScaffold } from "@/components/FormScaffold";
 import { api } from "@/lib/api";
 import { setSession } from "@/lib/session";
 import { color, font, radius } from "@/lib/theme";
@@ -58,23 +49,17 @@ export default function Register() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <ShieldLogo />
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Ionicons name="close" size={26} color={color.muted} />
-        </Pressable>
-      </View>
-
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={{ padding: 24, paddingTop: 8 }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+    <FormScaffold
+      contentStyle={{ padding: 24, paddingTop: 8 }}
+      header={
+        <View style={styles.header}>
+          <ShieldLogo />
+          <Pressable onPress={() => router.back()} hitSlop={12}>
+            <Ionicons name="close" size={26} color={color.muted} />
+          </Pressable>
+        </View>
+      }
+    >
           <Text style={styles.title}>Create your account</Text>
           <Text style={styles.sub}>
             HyperGuard learns how you normally spend, so it can tell a real transfer from
@@ -183,14 +168,11 @@ export default function Register() {
           >
             <Text style={styles.link}>I already have an account</Text>
           </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    </FormScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: color.void },
   header: {
     flexDirection: "row",
     alignItems: "center",

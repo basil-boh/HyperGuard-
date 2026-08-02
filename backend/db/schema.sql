@@ -115,6 +115,9 @@ create table if not exists guardian_links (
   invited_by         text not null default 'guardian',
   created_at         timestamptz not null default now(),
   responded_at       timestamptz,
+  -- Per-transfer ceiling this guardian set on the protected account. Null = none.
+  -- The lowest across a person's active guardians is what binds.
+  transfer_limit     numeric check (transfer_limit is null or transfer_limit > 0),
   constraint guardian_links_not_self check (guardian_user_id <> protected_user_id)
 );
 create unique index if not exists guardian_links_pair_idx
@@ -172,3 +175,6 @@ create unique index if not exists users_phone_idx on users(phone);
 
 -- The guardian network tables above are `create table if not exists`, so running
 -- this whole file again on an existing database adds them and changes nothing else.
+
+-- Guardian-set transfer ceiling (added after the network tables shipped).
+alter table guardian_links add column if not exists transfer_limit numeric;

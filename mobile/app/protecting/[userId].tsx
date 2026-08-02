@@ -1,9 +1,18 @@
 import React, { useCallback, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Avatar, Card, Kicker, Pill } from "@/components/ui";
+import { Avatar, Button, Card, Kicker, Pill } from "@/components/ui";
 import { api } from "@/lib/api";
 import { money, pct, relativeDay } from "@/lib/format";
 import { bandColor, color, font, radius } from "@/lib/theme";
@@ -67,6 +76,15 @@ export default function ProtectedPerson() {
               ) : null}
             </View>
           </Card>
+        ) : null}
+
+        {link ? (
+          <TransferLimitCard
+            link={link}
+            onChange={(next) =>
+              setLink((current) => (current ? { ...current, transfer_limit: next } : current))
+            }
+          />
         ) : null}
 
         <View style={styles.sectionHead}>
@@ -136,6 +154,137 @@ export default function ProtectedPerson() {
   );
 }
 
+/**
+ * The guardian's per-transfer ceiling on this account.
+ *
+ * Deliberately one-sided: only the guardian can change it, so it holds even if the
+ * person is being talked through raising it on a call. They can always see it and
+ * who set it, and can remove the guardian entirely if they disagree.
+ */
+function TransferLimitCard({
+  link,
+  onChange,
+}: {
+  link: GuardianLink;
+  onChange: (next: number | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(link.transfer_limit ? String(link.transfer_limit) : "");
+  const [busy, setBusy] = useState(false);
+
+  const name = link.protected.name.split(" ")[0];
+
+  const apply = async (amount: number | null) => {
+    setBusy(true);
+    try {
+      const updated = await api.setTransferLimit(link.id, amount);
+      onChange(updated.transfer_limit);
+      setEditing(false);
+    } catch (e: any) {
+      Alert.alert("Couldn't update the limit", e?.message ?? "Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const save = () => {
+    const amount = parseFloat(draft);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Alert.alert("Enter an amount", "The limit must be more than zero.");
+      return;
+    }
+    apply(amount);
+  };
+
+  const confirmRemove = () =>
+    Alert.alert("Remove the limit?", `${name} will be able to transfer any amount again.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: () => apply(null) },
+    ]);
+
+  return (
+    <>
+      <View style={styles.sectionHead}>
+        <Kicker>Transfer limit</Kicker>
+      </View>
+      <Card style={{ gap: 12 }}>
+        {editing ? (
+          <>
+            <Text style={styles.limitBody}>
+              The most {name} can send in a single transfer. Anything larger is refused
+              before it reaches the swarm.
+            </Text>
+            <View style={styles.limitInputRow}>
+              <Text style={styles.limitCurrency}>SGD</Text>
+              <TextInput
+                value={draft}
+                onChangeText={(t) => setDraft(t.replace(/[^0-9.]/g, ""))}
+                placeholder="500"
+                placeholderTextColor={color.faint}
+                style={styles.limitInput}
+                keyboardType="decimal-pad"
+                autoFocus
+                editable={!busy}
+              />
+            </View>
+            <View style={styles.limitChips}>
+              {[200, 500, 1000, 2000].map((v) => (
+                <Pressable key={v} style={styles.limitChip} onPress={() => setDraft(String(v))}>
+                  <Text style={styles.limitChipText}>{v.toLocaleString()}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Button label="Set limit" icon="lock-closed" onPress={save} loading={busy} />
+            <Pressable onPress={() => setEditing(false)} style={{ alignItems: "center" }}>
+              <Text style={styles.limitLink}>Cancel</Text>
+            </Pressable>
+          </>
+        ) : link.transfer_limit ? (
+          <>
+            <View style={styles.limitRow}>
+              <Ionicons name="lock-closed" size={18} color={color.signal} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.limitAmount}>{money(link.transfer_limit, "SGD")}</Text>
+                <Text style={styles.limitMeta}>per transfer · set by you</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label="Change"
+                  variant="ghost"
+                  onPress={() => {
+                    setDraft(String(link.transfer_limit));
+                    setEditing(true);
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button label="Remove" variant="ghost" onPress={confirmRemove} />
+              </View>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.limitRow}>
+              <Ionicons name="lock-open-outline" size={18} color={color.faint} />
+              <Text style={styles.limitBody}>
+                No limit. {name} can transfer any amount, subject to the swarm's review.
+              </Text>
+            </View>
+            <Button
+              label="Set a transfer limit"
+              icon="lock-closed"
+              variant="ghost"
+              onPress={() => setEditing(true)}
+            />
+          </>
+        )}
+      </Card>
+    </>
+  );
+}
+
 function bandOf(score: number): string {
   if (score >= 0.85) return "critical";
   if (score >= 0.6) return "high";
@@ -185,5 +334,36 @@ const styles = StyleSheet.create({
   },
   incidentPayee: { color: color.muted, fontSize: 13 },
   incidentFoot: { flexDirection: "row", alignItems: "center", gap: 9, marginTop: 10 },
+  limitRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  limitAmount: {
+    color: color.ink,
+    fontSize: 19,
+    fontWeight: font.black,
+    letterSpacing: -0.4,
+    fontVariant: ["tabular-nums"],
+  },
+  limitMeta: { color: color.faint, fontSize: 12, marginTop: 2 },
+  limitBody: { color: color.muted, fontSize: 13, lineHeight: 19, flex: 1 },
+  limitInputRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  limitCurrency: { color: color.muted, fontSize: 17, fontWeight: font.semi },
+  limitInput: {
+    flex: 1,
+    color: color.ink,
+    fontSize: 30,
+    fontWeight: font.black,
+    letterSpacing: -0.8,
+    padding: 0,
+    fontVariant: ["tabular-nums"],
+  },
+  limitChips: { flexDirection: "row", gap: 8 },
+  limitChip: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: color.hairline,
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+  },
+  limitChipText: { color: color.muted, fontSize: 12.5, fontWeight: font.medium },
+  limitLink: { color: color.signal, fontSize: 13.5, fontWeight: font.semi },
   scamTitle: { color: color.amber, fontSize: 12, flex: 1 },
 });

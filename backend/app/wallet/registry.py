@@ -36,6 +36,8 @@ class InterventionRegistry:
                 "customer": None, "transaction": None, "risk": None, "classification": None,
                 # voice follow-up results
                 "context": [], "assessment": None, "escalation": None, "report": None,
+                # what the tiered models actually cost this case (services/model_policy)
+                "model_usage": None,
             }
             self._cases[case_id] = bucket
             self._order.append(case_id)
@@ -68,7 +70,8 @@ class InterventionRegistry:
         self._bucket(case_id)["context"].append({"question": question, "answer": answer})
 
     def set_followup(self, case_id: str, *, assessment: dict | None = None,
-                     escalation: dict | None = None, report: str | None = None) -> None:
+                     escalation: dict | None = None, report: str | None = None,
+                     model_usage: dict | None = None) -> None:
         bucket = self._bucket(case_id)
         if assessment is not None:
             bucket["assessment"] = assessment
@@ -76,6 +79,8 @@ class InterventionRegistry:
             bucket["escalation"] = escalation
         if report is not None:
             bucket["report"] = report
+        if model_usage is not None:
+            bucket["model_usage"] = model_usage
 
     def get(self, case_id: str) -> dict | None:
         return self._cases.get(case_id)

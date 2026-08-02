@@ -1,18 +1,10 @@
 import React, { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, Card, Kicker } from "@/components/ui";
+import { FormScaffold } from "@/components/FormScaffold";
 import { api } from "@/lib/api";
 import { color, font, radius } from "@/lib/theme";
 
@@ -70,88 +62,87 @@ export default function AddProtected() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Ionicons name="close" size={26} color={color.muted} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Add someone to protect</Text>
-        <View style={{ width: 26 }} />
+    <FormScaffold
+      header={
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} hitSlop={12}>
+            <Ionicons name="close" size={26} color={color.muted} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Add someone to protect</Text>
+          <View style={{ width: 26 }} />
+        </View>
+      }
+      footer={
+        <Button
+          label="Send invitation"
+          icon="paper-plane"
+          onPress={invite}
+          loading={busy}
+          disabled={!valid}
+        />
+      }
+    >
+      <Text style={styles.intro}>
+        A parent or relative you worry about. Once they accept, you'll be alerted the
+        moment HyperGuard steps in for them — and you'll be able to read exactly what
+        happened.
+      </Text>
+
+      <Kicker>Their phone number</Kicker>
+      <TextInput
+        value={phone}
+        onChangeText={(t) => {
+          setPhone(t);
+          setError(null);
+        }}
+        placeholder="+65 8000 0001"
+        placeholderTextColor={color.faint}
+        style={styles.input}
+        keyboardType="phone-pad"
+        autoFocus
+        editable={!busy}
+        returnKeyType="done"
+        onSubmitEditing={() => {
+          Keyboard.dismiss();
+          if (valid) invite();
+        }}
+      />
+
+      <Kicker>You are their…</Kicker>
+      <View style={styles.chips}>
+        {RELATIONSHIPS.map((r) => {
+          const active = r === relationship;
+          return (
+            <Pressable
+              key={r}
+              onPress={() => setRelationship(r)}
+              style={[
+                styles.chip,
+                active && { borderColor: color.signal, backgroundColor: color.signalSoft },
+              ]}
+              disabled={busy}
+            >
+              <Text style={[styles.chipText, active && { color: color.signal }]}>{r}</Text>
+            </Pressable>
+          );
+        })}
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
-          <Text style={styles.intro}>
-            A parent or relative you worry about. Once they accept, you'll be alerted the
-            moment HyperGuard steps in for them — and you'll be able to read exactly what
-            happened.
-          </Text>
-
-          <Kicker>Their phone number</Kicker>
-          <TextInput
-            value={phone}
-            onChangeText={(t) => {
-              setPhone(t);
-              setError(null);
-            }}
-            placeholder="+65 8000 0001"
-            placeholderTextColor={color.faint}
-            style={styles.input}
-            keyboardType="phone-pad"
-            autoFocus
-            editable={!busy}
-          />
-
-          <Kicker>You are their…</Kicker>
-          <View style={styles.chips}>
-            {RELATIONSHIPS.map((r) => {
-              const active = r === relationship;
-              return (
-                <Pressable
-                  key={r}
-                  onPress={() => setRelationship(r)}
-                  style={[
-                    styles.chip,
-                    active && { borderColor: color.signal, backgroundColor: color.signalSoft },
-                  ]}
-                  disabled={busy}
-                >
-                  <Text style={[styles.chipText, active && { color: color.signal }]}>{r}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {error ? (
-            <View style={styles.error}>
-              <Ionicons name="alert-circle" size={16} color={color.crimson} />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
-
-          <Card style={styles.consent}>
-            <Ionicons name="lock-closed" size={17} color={color.ice} />
-            <Text style={styles.consentText}>
-              They decide. We'll send an invitation they have to accept — you won't see
-              their balance, their transfers, or anything else until they do.
-            </Text>
-          </Card>
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <Button
-            label="Send invitation"
-            icon="paper-plane"
-            onPress={invite}
-            loading={busy}
-            disabled={!valid}
-          />
+      {error ? (
+        <View style={styles.error}>
+          <Ionicons name="alert-circle" size={16} color={color.crimson} />
+          <Text style={styles.errorText}>{error}</Text>
         </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      ) : null}
+
+      <Card style={styles.consent}>
+        <Ionicons name="lock-closed" size={17} color={color.ice} />
+        <Text style={styles.consentText}>
+          They decide. We'll send an invitation they have to accept — you won't see
+          their balance, their transfers, or anything else until they do.
+        </Text>
+      </Card>
+    </FormScaffold>
   );
 }
 
@@ -202,7 +193,6 @@ const styles = StyleSheet.create({
   errorText: { color: color.crimson, fontSize: 13, flex: 1, lineHeight: 18 },
   consent: { flexDirection: "row", alignItems: "flex-start", gap: 11, marginTop: 24 },
   consentText: { color: color.muted, fontSize: 12.5, lineHeight: 18, flex: 1 },
-  footer: { padding: 20, borderTopWidth: 1, borderTopColor: color.hairline },
   done: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30 },
   doneIcon: {
     width: 66,

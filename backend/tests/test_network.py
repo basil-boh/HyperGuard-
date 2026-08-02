@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.api.network import effective_transfer_limit
 from app.services.filing import build_reference, file_case, filing_payload
 from app.wallet.network import (
     ACTIVE,
@@ -145,6 +146,91 @@ def test_reading_flips_unread(bank: Bank) -> None:
     assert report.unread
     report.read_at = datetime.now(timezone.utc)
     assert not report.unread
+
+
+# ── Guardian transfer limit ────────────────────────────────────────────────────
+async def test_no_limit_by_default(repo: InMemoryRepository) -> None:
+    """Seeded accounts start unrestricted, so no existing demo path changes."""
+    assert await effective_transfer_limit(repo, "acc_may") is None
+
+
+async def test_a_guardians_limit_binds_the_protected_account(
+    repo: InMemoryRepository,
+) -> None:
+    link = await repo.find_link("acc_marcus", "acc_may")
+    link.transfer_limit = 500.0
+    await repo.save_link(link)
+
+    limit = await effective_transfer_limit(repo, "acc_may")
+    assert limit is not None
+    assert limit.amount == 500.0
+    assert limit.guardian_user_id == "acc_marcus"
+    assert limit.relationship == "son"
+
+
+async def test_the_lowest_limit_wins(repo: InMemoryRepository, bank: Bank) -> None:
+    """Adding a guardian can only tighten protection, never loosen it."""
+    first = await repo.find_link("acc_marcus", "acc_may")
+    first.transfer_limit = 500.0
+    await repo.save_link(first)
+
+    second = GuardianLink(
+        id=new_link_id(),
+        guardian_user_id="acc_linda",
+        protected_user_id="acc_may",
+        relationship="daughter",
+        status=ACTIVE,
+        transfer_limit=200.0,
+    )
+    await repo.save_link(second)
+
+    limit = await effective_transfer_limit(repo, "acc_may")
+    assert limit.amount == 200.0 and limit.guardian_user_id == "acc_linda"
+
+
+async def test_a_pending_guardian_cannot_impose_a_limit(repo: InMemoryRepository) -> None:
+    """Marcus's invitation to Wong is unanswered — it must not bind anything yet."""
+    pending = await repo.find_link("acc_marcus", "acc_wong")
+    assert pending.status == PENDING
+    pending.transfer_limit = 50.0
+    await repo.save_link(pending)
+
+    assert await effective_transfer_limit(repo, "acc_wong") is None
+
+
+async def test_revoking_a_guardian_drops_their_limit(repo: InMemoryRepository) -> None:
+    link = await repo.find_link("acc_marcus", "acc_may")
+    link.transfer_limit = 500.0
+    await repo.save_link(link)
+    assert await effective_transfer_limit(repo, "acc_may") is not None
+
+    link.status = REVOKED
+    await repo.save_link(link)
+    assert await effective_transfer_limit(repo, "acc_may") is None
+
+
+async def test_clearing_a_limit_restores_full_access(repo: InMemoryRepository) -> None:
+    link = await repo.find_link("acc_marcus", "acc_may")
+    link.transfer_limit = 500.0
+    await repo.save_link(link)
+
+    link.transfer_limit = None
+    await repo.save_link(link)
+    assert await effective_transfer_limit(repo, "acc_may") is None
+
+
+def test_limit_survives_a_row_round_trip() -> None:
+    link = GuardianLink(
+        id=new_link_id(),
+        guardian_user_id="acc_marcus",
+        protected_user_id="acc_may",
+        relationship="son",
+        status=ACTIVE,
+        transfer_limit=500.0,
+    )
+    assert row_to_link(link_to_row(link)).transfer_limit == 500.0
+    link.transfer_limit = None
+    assert row_to_link(link_to_row(link)).transfer_limit is None
 
 
 # ── Simulated filing ───────────────────────────────────────────────────────────

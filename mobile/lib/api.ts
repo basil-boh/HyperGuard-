@@ -139,6 +139,13 @@ export const api = {
   revokeLink: (linkId: string) =>
     req<{ revoked: string }>(`/api/network/links/${linkId}`, { method: "DELETE" }),
 
+  /** Cap what the person you protect can send in one transfer. null clears it. */
+  setTransferLimit: (linkId: string, amount: number | null) =>
+    req<GuardianLink>(`/api/network/links/${linkId}/limit`, {
+      method: "POST",
+      body: JSON.stringify({ amount }),
+    }),
+
   // incident reports
   incidents: () => req<IncidentSummary[]>("/api/incidents"),
 

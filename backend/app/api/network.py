@@ -16,6 +16,7 @@ be sent onward by the customer it belongs to.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -57,6 +58,41 @@ class RespondRequest(BaseModel):
 class SendReportRequest(BaseModel):
     case_id: str = Field(min_length=1)
     note: str | None = None
+
+
+class TransferLimitRequest(BaseModel):
+    # None clears the limit. 0 is rejected rather than treated as "block everything",
+    # which would be an easy way to lock someone out of their own money by accident.
+    amount: float | None = Field(default=None, gt=0)
+
+
+@dataclass
+class EffectiveLimit:
+    """The binding per-transfer ceiling on an account, and who set it."""
+
+    amount: float
+    guardian_user_id: str
+    relationship: str
+
+
+async def effective_transfer_limit(
+    repo: WalletRepository, user_id: str
+) -> EffectiveLimit | None:
+    """The lowest limit set by any *active* guardian, or None if unrestricted.
+
+    Lowest-wins means adding a guardian can only tighten protection, never loosen
+    it, and revoking a link drops its limit automatically.
+    """
+    candidates = [
+        EffectiveLimit(
+            amount=float(link.transfer_limit),
+            guardian_user_id=link.guardian_user_id,
+            relationship=link.relationship,
+        )
+        for link in await repo.get_links_as_protected(user_id, status=ACTIVE)
+        if link.transfer_limit is not None
+    ]
+    return min(candidates, key=lambda c: c.amount) if candidates else None
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
@@ -307,6 +343,43 @@ async def respond_to_invitation(
                 await deliver_incident_report(repo, case)
 
     logger.info("invitation %s %s by %s", link_id, link.status, user_id)
+    return _render(link, briefs)
+
+
+@router.post("/links/{link_id}/limit")
+async def set_transfer_limit(
+    link_id: str,
+    body: TransferLimitRequest,
+    user_id: str = Depends(current_user_id),
+    repo: WalletRepository = Depends(repository),
+) -> dict:
+    """Cap what the person you protect can send in one transfer.
+
+    Only the guardian sets it — the whole point is that it survives someone being
+    talked into raising it mid-scam. The protected person always *sees* the limit and
+    who set it, and can revoke the guardian entirely if they disagree; that's the
+    escape hatch, and it's a deliberate one because it can't be done in thirty
+    seconds on a phone call.
+    """
+    link = await repo.get_link(link_id)
+    if link is None:
+        raise HTTPException(status_code=404, detail="link not found")
+    if link.guardian_user_id != user_id:
+        raise HTTPException(
+            status_code=403, detail="Only the guardian can set a limit on this account."
+        )
+    if link.status != ACTIVE:
+        raise HTTPException(
+            status_code=409, detail="They haven't accepted your invitation yet."
+        )
+
+    link.transfer_limit = body.amount
+    await repo.save_link(link)
+    logger.info(
+        "transfer limit for %s set to %s by %s",
+        link.protected_user_id, body.amount, user_id,
+    )
+    briefs = await _briefs(repo, [link])
     return _render(link, briefs)
 
 

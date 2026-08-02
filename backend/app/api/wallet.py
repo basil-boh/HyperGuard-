@@ -17,10 +17,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.deps import current_account, current_user_id, repository
-from app.api.network import deliver_incident_report
+from app.api.network import deliver_incident_report, effective_transfer_limit
 from app.config import get_settings
 from app.graph import get_orchestrator
 from app.services.baselines import derive_profile
+from app.services.model_policy import peek_usage
 from app.wallet.registry import get_registry
 from app.wallet.repository import WalletRepository
 from app.wallet.store import Account, build_case_record
@@ -56,8 +57,23 @@ class TransferRequest(BaseModel):
 
 # ── Account ──────────────────────────────────────────────────────────────────────
 @router.get("")
-async def account(acc: Account = Depends(current_account)) -> dict:
-    return acc.summary()
+async def account(
+    acc: Account = Depends(current_account),
+    user_id: str = Depends(current_user_id),
+    repo: WalletRepository = Depends(repository),
+) -> dict:
+    # The limit rides along with the account summary so the wallet can show it up
+    # front, rather than only discovering it when a transfer is refused.
+    limit = await effective_transfer_limit(repo, user_id)
+    payload = acc.summary()
+    if limit is not None:
+        briefs = await repo.get_user_brief([limit.guardian_user_id])
+        payload["transfer_limit"] = {
+            "amount": limit.amount,
+            "set_by": briefs.get(limit.guardian_user_id, {}).get("name", ""),
+            "relationship": limit.relationship,
+        }
+    return payload
 
 
 @router.post("/reset")
@@ -136,6 +152,23 @@ async def transfer(
 ) -> dict:
     if body.amount > acc.balance:
         raise HTTPException(status_code=400, detail="insufficient balance")
+
+    # A guardian's ceiling is checked before the swarm runs: it's a standing
+    # instruction from someone this customer trusted while they were clear-headed,
+    # not a risk judgement to be argued with mid-call.
+    limit = await effective_transfer_limit(repo, user_id)
+    if limit is not None and body.amount > limit.amount:
+        briefs = await repo.get_user_brief([limit.guardian_user_id])
+        guardian = briefs.get(limit.guardian_user_id, {}).get("name", "your guardian")
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"{acc.currency} {body.amount:,.2f} is over the "
+                f"{acc.currency} {limit.amount:,.2f} limit {guardian} "
+                f"({limit.relationship}) set for this account. "
+                f"Ask {guardian.split()[0]} if you need it raised."
+            ),
+        )
 
     archetype = None
     payee_phone = body.payee_phone
@@ -216,4 +249,12 @@ async def intervention(
         "assessment": bucket.get("assessment"),
         "escalation": bucket.get("escalation"),
         "report": bucket.get("report"),
+        # What the tiered models cost this case — see services/model_policy. Falls
+        # back to the live ledger so it's available before the follow-up finishes.
+        "model_usage": bucket.get("model_usage") or _live_usage(case_id),
     }
+
+
+def _live_usage(case_id: str) -> dict | None:
+    usage = peek_usage(case_id)
+    return usage.summary(get_settings()) if usage else None

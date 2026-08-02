@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar, Button, Card, Kicker, Pill } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useFocusFetch } from "@/lib/useFocusFetch";
+import { money } from "@/lib/format";
 import { color, font, radius } from "@/lib/theme";
 import type { GuardianLink, Network } from "@/lib/types";
 
@@ -123,6 +124,14 @@ export default function NetworkTab() {
                     {link.relationship}
                     {link.guardian.phone ? ` · ${link.guardian.phone}` : ""}
                   </Text>
+                  {link.transfer_limit ? (
+                    <View style={styles.limitLine}>
+                      <Ionicons name="lock-closed" size={11} color={color.ice} />
+                      <Text style={styles.limitText}>
+                        Capped your transfers at {money(link.transfer_limit, "SGD")}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
                 <Pressable
                   onPress={() =>
@@ -264,6 +273,8 @@ const styles = StyleSheet.create({
   name: { color: color.ink, fontSize: 15.5, fontWeight: font.semi },
   meta: { color: color.faint, fontSize: 12.5, marginTop: 2, textTransform: "capitalize" },
   incidentLine: { color: color.faint, fontSize: 12, marginTop: 4 },
+  limitLine: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 5 },
+  limitText: { color: color.ice, fontSize: 11.5 },
   empty: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   emptyText: { color: color.muted, fontSize: 13, lineHeight: 19, flex: 1 },
   invite: {

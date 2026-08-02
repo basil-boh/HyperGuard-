@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from app.domain.events import EventType, SwarmEvent
 from app.graph import get_orchestrator
 from app.schemas import CustomerProfile
+from app.services.model_policy import get_usage
 from app.services.reasoning import assess, incident_report
 from app.wallet.registry import get_registry
 from app.wallet.repository import get_repository
@@ -48,6 +49,9 @@ async def finalize_followup(case_id: str) -> None:
     txn_d = bucket.get("transaction") or {}
     risk_d = bucket.get("risk") or {}
     answers = bucket.get("context") or []
+    # The same ledger the in-call turns wrote to — this stage adds the deep-tier
+    # written outputs, so the case's total spend lands in one place.
+    usage = get_usage(case_id)
 
     # ── Educator ──────────────────────────────────────────────────────────────────
     # On the interactive path the graph skipped the educator, so run it here over the
@@ -70,7 +74,8 @@ async def finalize_followup(case_id: str) -> None:
     await rt.bus.publish(SwarmEvent(type=EventType.agent_completed, case_id=case_id, agent="educator"))
 
     assessment = await assess(
-        rt.llm, transaction=txn_d, risk=risk_d, classification=classification_d, answers=answers
+        rt.llm, transaction=txn_d, risk=risk_d, classification=classification_d,
+        answers=answers, usage=usage
     )
     await rt.bus.publish(
         SwarmEvent(
@@ -113,7 +118,7 @@ async def finalize_followup(case_id: str) -> None:
         await rt.bus.publish(SwarmEvent(type=EventType.agent_engaged, case_id=case_id, agent="recovery_coordinator"))
         report = await incident_report(
             rt.llm, case_id=case_id, customer=customer_d, transaction=txn_d,
-            risk=risk_d, answers=answers, assessment=assessment,
+            risk=risk_d, answers=answers, assessment=assessment, usage=usage,
         )
 
     escalation = {
@@ -134,7 +139,10 @@ async def finalize_followup(case_id: str) -> None:
         )
         await rt.bus.publish(SwarmEvent(type=EventType.agent_completed, case_id=case_id, agent="recovery_coordinator"))
 
-    reg.set_followup(case_id, assessment=assessment, escalation=escalation, report=report)
+    reg.set_followup(
+        case_id, assessment=assessment, escalation=escalation, report=report,
+        model_usage=usage.summary(rt.settings),
+    )
 
     # Build the call transcript from the synchronously-stored Q&A (the bus-recorded
     # turns can race finalize), and persist it into the case so the control centre's

@@ -107,9 +107,11 @@ The instant risk crosses the threshold, an outbound call is placed via Twilio wi
 
 ### <img src="assets/icons/educator.svg" width="22" align="middle" alt="" /> Educator — names the script she's being read from
 
-Scams are not improvised. They run from a small number of scripts, and each one has a tell. The Educator classifies the live transcript against six archetypes — **government/police impersonation, bank impersonation, investment/crypto, romance, job/task, and tech support** — and feeds the counter-line straight back into the call for the Negotiator to say aloud. For police impersonation, that's the sentence no real agency ever crosses: *we will never ask you to move money to a safe account.*
+Scams are not improvised. They run from a small number of scripts, and each one has a tell. The Educator matches the live transcript against six archetypes — **government/police impersonation, bank impersonation, investment/crypto, romance, job/task, and tech support** — and feeds the counter-line straight back into the call for the Negotiator to say aloud. For police impersonation, that's the sentence no real agency ever crosses: *we will never ask you to move money to a safe account.*
 
 Naming the script is what breaks it. A generic "this may be a scam" warning is easy for a victim mid-manipulation to dismiss. Being told exactly what the person on the other line is about to say next is not.
+
+**How it actually works.** This is an indicator-density classifier, not an LLM — each archetype carries a list of linguistic fingerprints, and confidence scales with how many distinct ones light up. Same reasoning as the Digital Twin: the counter-lines are read aloud to a frightened person and quoted back in an audit trail, so they are authored and deterministic rather than generated. The LLM's judgement enters *after* the call, in the adjudicator (`services/reasoning.py`), where it weighs the customer's actual answers and can disagree with the pattern match. Swapping in LLM classification with this matcher as a strictness floor is on the roadmap — see [FUNCTIONALITY.md](./FUNCTIONALITY.md).
 
 ### <img src="assets/icons/guardian.svg" width="22" align="middle" alt="" /> Guardian — brings in someone she trusts
 
@@ -207,6 +209,35 @@ An incident report is the whole account of what happened — the risk signals th
 
 **On the authorities filing.** The "Alert authorities" action is a **simulation**, and the code goes out of its way to keep it impossible to mistake for anything else: every reference is prefixed `SIM-`, every payload carries `simulated: true` plus a disclaimer naming the real channel (ScamShield, 1799), the status timeline stops at *referred* and never invents an outcome like funds recovered or an arrest, and `services/filing.py` has no network access of any kind. HyperGuard is not connected to the police, the National Anti-Scam Centre, or any other body. If you later wire up a real integration, that module is the seam — and the labelling should be the last thing removed, not the first.
 
+### Guardian-set transfer limits
+
+A guardian can cap what the person they protect can send in one transfer. It's checked *before* the swarm runs, because it isn't a risk judgement — it's a standing instruction from someone this customer trusted while they were clear-headed, and the whole point is that it holds when they aren't.
+
+Only the guardian can change it. That asymmetry is the feature: a limit the victim can raise mid-call is a limit a scammer can talk them through raising. The protected person always sees the limit and who set it, on their own balance card and next to that guardian's name — and if they disagree, they can revoke the guardian entirely. That's the escape hatch, and it's deliberately not something you can do in thirty seconds while someone is shouting at you on the phone.
+
+Where several guardians each set one, the **lowest wins**, so adding a guardian can only ever tighten protection. Revoking a link drops its limit automatically. Nothing is seeded with a limit, so no existing demo path changes until you set one.
+
+### Model tiering — paying for the hard cases only
+
+Most transfers never reach a model at all: the Digital Twin's risk score is a deterministic logistic function, so the common path is *free*, not merely cheap. Of the cases that do reach one, most are ordinary verification calls a small model handles well. The expensive model is reserved for cases that have actually escalated.
+
+| Call | Tier | Why |
+|---|---|---|
+| Negotiator's opening line | fast | The customer is on the phone. Time-to-first-word is the product. |
+| Negotiator's follow-up turns | fast → **deep** on escalation | Exploratory questions are cheap work; once a pattern is confirmed the stakes change. |
+| Educator's guidance line | *no model* | The safety wording is authored, not generated. |
+| Post-call assessment | **deep** | It decides whether a family member gets woken up. Nobody is waiting. |
+| Incident report | **deep** | It's the artefact a human reads. |
+
+The promotion rule is one readable predicate in `services/model_policy.py`: **a confirmed scam pattern, or risk at/above the hard-block threshold.** Everything else stays on the fast model.
+
+```bash
+LLM_MODEL_FAST=gpt-5.5-mini     # routine work
+LLM_MODEL_DEEP=gpt-5.5          # escalated cases + written outputs (falls back to LLM_MODEL)
+```
+
+Every call is recorded — tier, model, latency, tokens — and the per-case ledger rides along on the intervention poll as `model_usage`, so the saving is measurable rather than asserted. Set the optional `LLM_PRICE_*` variables and it also reports dollars, including what the same case *would* have cost on the deep model throughout. Left unset it reports tokens and latency only: a guessed price is worse than no price.
+
 Seeded so the network is populated on first load: Marcus watches Alex and May with two of May's incidents in his inbox (one unread, one already filed), Linda watches her father, and a pending invitation from Marcus to Wong Ah Kow is waiting so the accept flow can be demonstrated on a single device.
 
 ### Keys, and what happens without them
@@ -219,8 +250,10 @@ Every external dependency is capability-gated. Absent a credential, that subsyst
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_PHONE_NUMBER` | places a real outbound call | Optional. Without it, the conversation runs in-process. |
 | `ELEVENLABS_API_KEY` | the negotiator's voice | Optional. Falls back to Twilio's Polly TTS. |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` | cases and transcripts survive a restart | Optional. Without it, in-memory. |
-| `REDIS_URL` | distributed event bus across workers | Optional. Without it, an in-process bus. |
+| `REDIS_URL` | mirrors every swarm event to a Redis stream, for audit and replay | Optional. The bus itself is in-process either way — nothing consumes the stream yet, so this does not make the app multi-worker. |
 | `AUTH_SECRET` | signs customer session tokens | Local: no. Deployed: yes, or every restart signs everyone out. |
+| `LLM_MODEL_FAST` / `LLM_MODEL_DEEP` | cheap model for routine work, powerful one for escalated cases | Optional. Both fall back to `LLM_MODEL`. |
+| `LLM_PRICE_*_INPUT` / `_OUTPUT` | turns recorded token counts into a cost estimate | Optional. Unset, the API reports tokens and latency but never dollars. |
 
 <details>
 <summary><b>Project layout and the developer contract</b></summary>

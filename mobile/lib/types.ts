@@ -5,6 +5,8 @@ export interface WalletSummary {
   balance: number;
   recipients: number;
   next_of_kin: number;
+  /** Present only when a guardian has capped this account's per-transfer amount. */
+  transfer_limit?: { amount: number; set_by: string; relationship: string };
 }
 
 export interface LedgerEntry {
@@ -85,6 +87,8 @@ export interface GuardianLink {
   responded_at: string | null;
   guardian: PersonBrief;
   protected: PersonBrief;
+  /** Per-transfer ceiling this guardian set. null = none. Lowest across active links wins. */
+  transfer_limit: number | null;
   /** Present on "I'm protecting" rows only. */
   incidents?: { total: number; unread: number };
 }
