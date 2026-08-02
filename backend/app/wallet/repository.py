@@ -59,6 +59,21 @@ _NEW_USER_STD = 400.0
 _PIN_MIGRATION = "alter table users add column if not exists pin_hash text;"
 
 
+class MigrationRequired(RuntimeError):
+    """A column this write needs hasn't been migrated yet.
+
+    PostgREST reports a missing column as a generic API error, which surfaces as an
+    opaque 500. Since the fix is always one statement, we name it instead.
+    """
+
+    def __init__(self, statement: str) -> None:
+        self.statement = statement
+        super().__init__(
+            "This database is missing a column for that feature. Run this once in "
+            f"the Supabase SQL editor, then try again:\n\n    {statement}"
+        )
+
+
 class CredentialStoreUnavailable(RuntimeError):
     """The credential column hasn't been migrated yet.
 
@@ -477,7 +492,15 @@ class SupabaseRepository(WalletRepository):
         row = link_to_row(link)
 
         def _w():
-            self._connect().table("guardian_links").upsert(row).execute()
+            try:
+                self._connect().table("guardian_links").upsert(row).execute()
+            except Exception as exc:
+                if "transfer_limit" in str(exc):
+                    raise MigrationRequired(
+                        "alter table guardian_links add column if not exists "
+                        "transfer_limit numeric;"
+                    ) from exc
+                raise
 
         await asyncio.to_thread(_w)
 

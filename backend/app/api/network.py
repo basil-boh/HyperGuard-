@@ -36,7 +36,7 @@ from app.wallet.network import (
     new_link_id,
     new_report_id,
 )
-from app.wallet.repository import WalletRepository
+from app.wallet.repository import MigrationRequired, WalletRepository
 from app.wallet.store import CaseRecord
 
 logger = logging.getLogger("hyperguard.network")
@@ -374,7 +374,11 @@ async def set_transfer_limit(
         )
 
     link.transfer_limit = body.amount
-    await repo.save_link(link)
+    try:
+        await repo.save_link(link)
+    except MigrationRequired as exc:
+        logger.error("%s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     logger.info(
         "transfer limit for %s set to %s by %s",
         link.protected_user_id, body.amount, user_id,
