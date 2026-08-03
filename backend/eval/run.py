@@ -111,8 +111,10 @@ async def main() -> None:
     )
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text("\n".join(sections))
-    (args.out.parent / "results.json").write_text(json.dumps(raw, indent=1, default=str))
+    args.out.write_text("\n".join(sections), encoding="utf-8")
+    (args.out.parent / "results.json").write_text(
+        json.dumps(raw, indent=1, default=str), encoding="utf-8"
+    )
     print(f"\nwrote {args.out}")
 
 

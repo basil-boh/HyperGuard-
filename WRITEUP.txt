@@ -1,0 +1,56 @@
+
+THE PROBLEM AND OUR APPROACH
+
+Singapore lost S$913.1 million to scams in 2025, and 81.8% of cases were self-effected transfers: the scammer never touched the account, they talked the victim into paying (SPF, 2025). Existing tools cannot reach this failure mode. ScamShield is a pre-contact filter; once the fake "police officer" has convinced the victim, there is no message left to block; the victim opens their own banking app and presses send. Banks act after settlement, once funds have scattered through mule accounts. The only window that matters is the seconds between "send" and settlement.
+
+Nor is this an "elderly problem": 85.2% of 2025 victims were under 65, with adults 30-49 the largest cohort, while seniors lost the most per victim. Government impersonation hits retirees; investment, job-task and romance scams hit working adults and students.
+
+Success criteria, defined before building: (1) a high-risk transfer is held before money leaves, not reported after; (2) every decision carries an explanation a customer, and a regulator, can read; (3) legitimate traffic is not wrongly blocked, with friction measured, not assumed; (4) protection keeps working when every external API is down.
+
+HyperGuard is a multi-agent swarm embedded in the bank's payment flow, orchestrated as a LangGraph state machine. Per transfer: a Digital Twin scores risk against that customer's own behavioural baseline (eight weighted signals combined through a logistic link with per-signal contribution shares). Above threshold, a Voice Negotiator phones the customer mid-transfer; an Educator classifies the scam archetype from the customer's own words against a six-archetype taxonomy and debriefs them by quoting their own sentences back; a Guardian alerts next-of-kin by SMS; an Arbiter approves or holds; a Recovery agent assembles a bank-ready evidence dossier. The backend is Python with FastAPI; clients are a Next.js bank console and an Expo mobile wallet with an "agents at work" screen and a Guardians tab.
+
+Decisions made, alternatives ruled out: a deterministic risk engine, not ML, because no labelled training data exists at this scale and an unexplainable score is unusable in banking. LLMs advisory, never safety-critical: scammers coach victims, so a promptable judge is an attack surface; every LLM call has a deterministic fallback and scam guidance is delivered verbatim from the authored taxonomy. We used commodity pieces (Twilio, OpenAI, ElevenLabs, Supabase, Redis, LangGraph, Next.js, Expo) and built everything carrying the safety argument: risk engine, taxonomy, victim simulator, orchestration, bank sandbox. Every integration is optional; with zero keys the full swarm runs deterministically end-to-end.
+
+
+EVIDENCE, EXPERIMENTS AND USER TESTING
+
+Every figure below is reproducible with two commands and no API keys (`python -m eval.generate --n 320 --no-llm`, then `python -m eval.run --all --no-llm`); the committed report is backend/eval/results/REPORT.md. The dataset is synthetic (320 cases: 65 routine legitimate, 121 unusual-but-legitimate hard negatives, 134 scam variants across all six archetypes), generated without ever seeing the classifier's indicator lists, with that separation itself measured in the report. We have not yet tested with real users.
+
+- Automated suite: 1,009 tests pass (8 skipped on a data precondition), including 922 property-based tests and four end-to-end swarm scenarios, hermetic even with live credentials configured.
+
+- Risk engine vs baselines: ROC-AUC 0.930 (95% CI 0.90-0.96) versus 0.673 for the best naive rule (first-time-payee); 98.5% of scams score above the shipped threshold. Ablation shows all eight signals contribute.
+
+- The conversation earns its keep: score-only would wrongly block 102 of 186 legitimate transfers; adding the verification interview cuts wrong blocks to 4 (2.2%) while still holding 125 of 134 scams (93.3%). The call changed 105 of 320 decisions: 98 improvements, 7 regressions.
+
+- Friction lands where it should: 0 of 65 routine legitimate transfers were flagged; verification calls fall only on the deliberately hard-negative slice.
+
+- Explainability, measured: the fired signal set exactly matches ground truth in 92.2% of cases, the top-contributing signal names a true cause in 100%, and 0 of 827 fired signals carry an empty reason.
+
+- The live path works end-to-end: real Twilio call with a speech interview, LLM adjudication, guardian SMS and incident report persisted to the case (shown in the demo video).
+
+
+CONSTRAINTS, LIMITATIONS AND INCOMPLETE AREAS
+
+- Latency and load (measured on a laptop): risk scoring and the hold decision take under 0.5 ms; a full deterministic intervention about 7 ms; 200 concurrent interventions finish in about 1 s in one process. Degradation is designed: LLM down means deterministic dialogue; Twilio down means simulated interview; Redis/Supabase down means in-process fallbacks.
+
+- Unit economics. Deterministic path: near-zero marginal cost. Live intervention: estimated US$0.15-0.35 (price-sheet estimates, not measured billing). The binding constraint is false-positive call volume, measured above.
+
+- Safety bias. At risk 0.88+ the arbiter holds even when the interview is inconclusive; we accept friction over loss.
+
+- Where it breaks: (1) an adversarially-reworded scam scoring 0.802 was held, then released by the interview, so the conversation can be talked past; (2) external validity: the dataset is synthetic, and offline template utterances only weakly test rewording robustness; (3) scores rank well but are not calibrated probabilities (ECE 0.232); (4) the voice interview is three fixed questions, not free conversation; (5) the "filed with authorities" step is synthetic; (6) auth (phone+PIN, signed session tokens) is merged, but a demo header override is honoured by default and must be disabled for real deployments; (7) no user testing yet.
+
+
+WHAT WE WOULD IMPROVE NEXT
+
+Sourced real-world cases (SPF briefs, enforcement write-ups) to replace the synthetic dataset; guardian co-approval (two-key transfers); a rehearsal mode reusing the victim simulator as inoculation training; streaming call transcription to replace the fixed interview; score calibration; measured billing; then a usability study with a seniors' community group and a bank sandbox pilot.
+
+
+KEY FILES
+
+- backend/eval/results/REPORT.md - the full evaluation report backing every number above: baselines, ablations, cost model, explainability audit.
+- backend/app/graph.py - the LangGraph state machine wiring the six agents, with the full flow diagrammed in its docstring.
+- backend/app/services/risk_engine.py - the Digital Twin's deterministic scoring core (eight signals, logistic link, per-signal contributions); demonstrates the explainability claim.
+- backend/app/services/scam_taxonomy.py - the six-archetype taxonomy: indicators, verbatim guidance, victim scripts; demonstrates that the LLM refines wording but never the safety logic.
+- backend/eval/run.py - the evaluation runner; regenerates the report from scratch with no API keys.
+- backend/eval/generate.py - dataset generation with every distributional assumption written out in one place; demonstrates what the evaluation rests on.
+- backend/tests/test_swarm.py - the four end-to-end swarm scenarios in the automated suite.

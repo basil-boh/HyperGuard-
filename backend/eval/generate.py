@@ -398,7 +398,9 @@ async def _main() -> None:
     args = ap.parse_args()
 
     ds = await build(args.n, args.seed, use_llm=not args.no_llm)
-    args.out.write_text(json.dumps(json.loads(ds.model_dump_json()), indent=1))
+    args.out.write_text(
+        json.dumps(json.loads(ds.model_dump_json()), indent=1), encoding="utf-8"
+    )
     print(f"wrote {len(ds.cases)} cases → {args.out}  (utterances: {ds.generator})")
     for k, v in sorted(ds.counts().items()):
         print(f"  {k:<20} {v}")
@@ -409,7 +411,7 @@ def load(path: Path = DATA_PATH) -> Dataset:
         raise SystemExit(
             f"No dataset at {path}. Build one first:  python -m eval.generate --n 320"
         )
-    return Dataset.model_validate_json(path.read_text())
+    return Dataset.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
