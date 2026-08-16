@@ -107,12 +107,31 @@ class ModelUsage:
             bucket["completion_tokens"] += call.completion_tokens
             bucket["latency_ms"] += call.latency_ms
 
+        total_tokens = sum(c.prompt_tokens + c.completion_tokens for c in self.calls)
+        deep_tokens = sum(
+            c.prompt_tokens + c.completion_tokens for c in self.calls if c.tier == DEEP
+        )
+        failed = [c for c in self.calls if not c.ok]
+
         payload = {
             "calls": [c.json() for c in self.calls],
             "total_calls": len(self.calls),
             "by_tier": by_tier,
             "total_latency_ms": sum(c.latency_ms for c in self.calls),
             "promoted": any(c.tier == DEEP for c in self.calls),
+            # Price-free saving evidence. Dollars need a configured rate and we refuse to
+            # guess one, but "what share of this case's tokens avoided the expensive model"
+            # is measurable from the ledger alone — so the tiering claim is backed by a
+            # number even when no price table exists.
+            "total_tokens": total_tokens,
+            "deep_token_share": round(deep_tokens / total_tokens, 4) if total_tokens else None,
+            "fast_token_share": (
+                round((total_tokens - deep_tokens) / total_tokens, 4) if total_tokens else None
+            ),
+            # Surfaced so a dead tier can never hide behind a healthy-looking capability
+            # report again — see the gpt-5.5-mini incident in FUNCTIONALITY.md.
+            "failed_calls": len(failed),
+            "degraded": bool(failed),
         }
         cost = self._cost(settings) if settings else None
         if cost is not None:

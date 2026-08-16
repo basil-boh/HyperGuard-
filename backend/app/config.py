@@ -78,7 +78,12 @@ class Settings(BaseSettings):
     # Tiered models (see services/model_policy). Routine work — the negotiator's
     # in-call lines on an unescalated case — runs on the fast model; a confirmed scam
     # or a hard-block-level risk promotes to the deep one, as do the written outputs.
-    llm_model_fast: str = "gpt-5.5-mini"
+    # NB: this must be a model id the configured key can actually reach. A wrong id 404s
+    # on every routine call, and because the failure path returns None the callers quietly
+    # fall back to their scripted lines — the swarm looks up (`capabilities.llm` stays
+    # true) while the customer hears templates. `_call` now retries such a failure on the
+    # deep tier so a bad id degrades to expensive rather than to silent.
+    llm_model_fast: str = "gpt-5-mini"
     llm_model_deep: str | None = None  # falls back to llm_model
     llm_temperature: float = 0.2
     llm_timeout_seconds: float = 30.0

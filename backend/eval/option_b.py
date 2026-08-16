@@ -44,7 +44,11 @@ def keyword_classify(case: EvalCase) -> tuple[str, float]:
 
 
 async def llm_classify(case: EvalCase, llm: LLMClient) -> tuple[str, float]:
-    out = await llm.complete_json(_LLM_SYSTEM, f"The customer said:\n{case.speech}")
+    # tier="deep" deliberately: the default "fast" tier resolves to a model id that 404s,
+    # and a silent fallback would score the LLM as if it had answered "none" every time.
+    out = await llm.complete_json(
+        _LLM_SYSTEM, f"The customer said:\n{case.speech}", tier="deep"
+    )
     arch = (out or {}).get("archetype")
     if arch not in _LABELS:
         arch = ScamArchetype.none.value

@@ -117,7 +117,9 @@ async def b5_llm_scores(cases: list[EvalCase], llm: LLMClient, concurrency: int 
 
     async def one(case: EvalCase) -> float:
         async with sem:
-            out = await llm.complete_json(_B5_SYSTEM, _describe(case.customer, case.transaction))
+            out = await llm.complete_json(
+                _B5_SYSTEM, _describe(case.customer, case.transaction), tier="deep"
+            )
         try:
             return max(0.0, min(1.0, float((out or {}).get("p"))))
         except (TypeError, ValueError):

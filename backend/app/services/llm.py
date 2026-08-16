@@ -18,7 +18,7 @@ import time
 from typing import Any
 
 from app.config import Settings
-from app.services.model_policy import FAST, ModelCall, ModelUsage
+from app.services.model_policy import DEEP, FAST, ModelCall, ModelUsage
 
 logger = logging.getLogger("hyperguard.llm")
 
@@ -98,8 +98,33 @@ class LLMClient:
         try:
             resp = await self._create(client, **kwargs)
         except Exception as exc:
-            logger.warning("LLM %s (%s/%s) failed, falling back: %s", purpose, tier, model, exc)
             self._record(usage, purpose, tier, model, started, ok=False)
+            deep_model = self.model_for(DEEP)
+            # Degrade to expensive, not to silent. A misconfigured or withdrawn fast model
+            # would otherwise take every routine call down to a scripted fallback while the
+            # capability report still claims the LLM is live — the worst kind of outage,
+            # because nothing surfaces it. The deep tier is the one we know is exercised by
+            # the written artefacts, so it is the safe landing place.
+            if tier != DEEP and deep_model != model:
+                logger.warning(
+                    "LLM %s (%s/%s) failed: %s — retrying on %s",
+                    purpose, tier, model, exc, deep_model,
+                )
+                kwargs["model"] = deep_model
+                retried = time.perf_counter()
+                try:
+                    resp = await self._create(client, **kwargs)
+                except Exception as exc2:
+                    logger.warning(
+                        "LLM %s deep retry (%s) also failed, falling back: %s",
+                        purpose, deep_model, exc2,
+                    )
+                    self._record(usage, purpose, DEEP, deep_model, retried, ok=False)
+                    return None
+                self._record(usage, purpose, DEEP, deep_model, retried, resp=resp)
+                return resp.choices[0].message.content
+
+            logger.warning("LLM %s (%s/%s) failed, falling back: %s", purpose, tier, model, exc)
             return None
 
         self._record(usage, purpose, tier, model, started, resp=resp)

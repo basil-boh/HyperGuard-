@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HyperGuard — Evaluation Findings</title>
+<style>
+  :root{
+    --void:#07080c; --abyss:#0b0d13; --surface:#101219; --raised:#161923;
+    --hairline:#242836; --grid:#1e222e;
+    --ink:#e8ecf2; --muted:#98a0b0; --faint:#7a8394;
+    --brand:#c9f24a;                     /* chrome + text only, never a data mark */
+    /* Data marks — snapped into the dark-mode lightness band and validated:
+       ice↔crimson ΔE 16.0 · ice↔lime ΔE 18.3 (deutan). lime↔crimson is ΔE 3.9,
+       so those two never appear in the same chart despite the obvious semantics. */
+    --c-1:#0fa4b8; --c-2:#fe4459; --c-3:#83a208; --c-ref:#39404f;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--void);color:var(--ink);font-family:var(--sans);
+       font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px 96px}
+
+  header{padding:72px 0 40px;border-bottom:1px solid var(--hairline);margin-bottom:56px}
+  .lockup{display:flex;align-items:center;gap:14px;margin-bottom:34px}
+  .lockup span{font-family:var(--mono);font-size:1.55rem;font-weight:600;
+               letter-spacing:-.5px;color:var(--brand)}
+  h1{font-size:clamp(2rem,4.4vw,3rem);line-height:1.1;margin:0 0 18px;
+     letter-spacing:-.02em;font-weight:600}
+  .sub{font-size:1.15rem;color:var(--muted);max-width:66ch;margin:0}
+  .readout{font-family:var(--mono);font-size:.7rem;letter-spacing:.22em;
+           text-transform:uppercase;color:var(--faint);margin:0 0 10px}
+  .meta{margin-top:30px;display:flex;flex-wrap:wrap;gap:10px}
+  .chip{font-family:var(--mono);font-size:.74rem;border:1px solid var(--hairline);
+        border-radius:5px;padding:5px 11px;color:var(--muted);background:var(--abyss)}
+
+  section{margin:0 0 68px}
+  h2{font-size:1.6rem;margin:0 0 8px;letter-spacing:-.015em;font-weight:600}
+  h2 .n{font-family:var(--mono);color:var(--brand);font-size:1rem;margin-right:12px}
+  .lede{color:var(--muted);max-width:74ch;margin:0 0 26px}
+  h3{font-size:1rem;margin:36px 0 10px;font-weight:600}
+
+  /* stat tiles — proportional figures, sans face (hero numbers are not mono) */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:30px 0}
+  .stat{background:var(--surface);border:1px solid var(--hairline);border-radius:12px;padding:20px 22px}
+  .stat .v{font-size:2.1rem;font-weight:600;letter-spacing:-.03em;line-height:1.1;display:block}
+  .stat .l{font-size:.86rem;color:var(--muted);margin-top:7px;display:block;line-height:1.45}
+  .good .v{color:var(--c-3)} .bad .v{color:var(--c-2)}
+  .warn .v{color:#be8907} .cool .v{color:var(--c-1)}
+
+  /* figures */
+  figure{margin:22px 0 8px;background:var(--surface);border:1px solid var(--hairline);
+         border-radius:12px;padding:22px 24px 18px}
+  figcaption{font-size:.85rem;color:var(--muted);margin-top:14px;line-height:1.5}
+  figcaption b{color:var(--ink);font-weight:600}
+  .fig-t{font-size:.95rem;font-weight:600;margin:0 0 2px}
+  .fig-s{font-size:.82rem;color:var(--faint);margin:0 0 16px}
+  svg{display:block;width:100%;height:auto;overflow:visible}
+  .legend{display:flex;flex-wrap:wrap;gap:18px;margin:0 0 14px;font-size:.82rem;color:var(--muted)}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:7px;
+            vertical-align:-1px}
+  .ax{fill:var(--faint);font-size:11px;font-family:var(--mono)}
+  .axl{fill:var(--faint);font-size:10.5px;font-family:var(--mono);letter-spacing:.1em;
+       text-transform:uppercase}
+  .lbl{fill:var(--ink);font-size:11.5px;font-family:var(--mono);font-weight:600}
+  .rowlbl{fill:var(--muted);font-size:12px}
+  .gridline{stroke:var(--grid);stroke-width:1}
+  .hit{fill:transparent;cursor:crosshair}
+
+  .scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--hairline);border-radius:12px}
+  table{width:100%;border-collapse:collapse;font-size:.9rem;min-width:560px}
+  th,td{padding:11px 15px;text-align:left;border-bottom:1px solid var(--hairline)}
+  thead th{font-family:var(--mono);font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;
+           color:var(--faint);background:var(--abyss);font-weight:500;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr.hl{background:rgba(201,242,74,.07)}
+  td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .win{color:var(--c-3);font-weight:600} .lose{color:var(--c-2);font-weight:600}
+  .dim{color:var(--faint)}
+
+  .call{border-left:3px solid var(--c-3);background:var(--surface);padding:18px 22px;
+        border-radius:0 10px 10px 0;margin:24px 0}
+  .call.danger{border-color:var(--c-2)} .call.caution{border-color:#be8907}
+  .call .t{font-family:var(--mono);font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;
+           color:var(--c-3);margin-bottom:8px;display:block}
+  .call.danger .t{color:var(--c-2)} .call.caution .t{color:#be8907}
+  .call p{margin:0;color:var(--muted)} .call p+p{margin-top:10px}
+  .call strong{color:var(--ink)}
+
+  code{font-family:var(--mono);font-size:.86em;background:var(--raised);padding:1.5px 6px;
+       border-radius:4px;color:var(--c-1)}
+  details{margin:14px 0}
+  summary{cursor:pointer;color:var(--faint);font-size:.85rem;font-family:var(--mono)}
+  footer{border-top:1px solid var(--hairline);padding-top:26px;color:var(--faint);font-size:.84rem}
+
+  #tip{position:fixed;pointer-events:none;opacity:0;transition:opacity .12s;z-index:99;
+       background:var(--raised);border:1px solid var(--hairline);border-radius:8px;
+       padding:9px 12px;font-size:.8rem;font-family:var(--mono);color:var(--ink);
+       box-shadow:0 10px 30px -12px #000;white-space:nowrap}
+  @media print{
+    body{background:#fff;color:#111}
+    .stat,.call,.scroll,figure,thead th{background:#fafafa}
+    section,figure{break-inside:avoid} #tip{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="tip" role="status" aria-live="polite"></div>
+<div class="wrap">
+
+<header>
+  <div class="lockup">
+    <svg width="44" height="44" viewBox="0 0 140 140" fill="none" aria-hidden="true">
+      <g stroke="#c9f24a" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M70 22 L112 39 V72 C112 97 94 113 70 121 C46 113 28 97 28 72 V39 Z" stroke-width="5"/>
+        <g stroke-width="6"><path d="M50 65 V79"/><path d="M60 55 V89"/><path d="M70 46 V98"/>
+        <path d="M80 55 V89"/><path d="M90 65 V79"/></g>
+      </g>
+    </svg>
+    <span>HyperGuard</span>
+  </div>
+  <p class="readout">Evaluation findings</p>
+  <h1>How do we know it works?</h1>
+  <p class="sub">Every claim measured against a baseline, not reported in isolation.
+    320 labelled cases, six risk scorers, four classifiers, four decision pipelines.
+    The uncomfortable numbers are here too — they are the ones worth knowing.</p>
+  <div class="meta">
+    <span class="chip">320 cases</span><span class="chip">96 scams · 38 reworded</span>
+    <span class="chip">186 legitimate</span><span class="chip">synthetic dataset</span>
+    <span class="chip">1011 tests passing</span>
+  </div>
+</header>
+
+<!-- ═══ 01 ═══ -->
+<section>
+  <h2><span class="n">01</span>The four findings that matter</h2>
+  <p class="lede">Two vindicate the design. Two say something must change before this goes near a bank.</p>
+  <div class="stats">
+    <div class="stat good"><span class="v">0.897</span><span class="l">Risk engine ROC-AUC, against
+      <strong>0.543</strong> for a non-personalised rule. The Digital Twin thesis holds.</span></div>
+    <div class="stat bad"><span class="v">80.2%</span><span class="l">of legitimate-but-unusual
+      transfers flagged at the shipped threshold. This is the deployment blocker.</span></div>
+    <div class="stat warn"><span class="v">63→41%</span><span class="l">Keyword classifier precision,
+      clean vs reworded. It keeps firing — on the wrong scam.</span></div>
+    <div class="stat cool"><span class="v">91</span><span class="l">decisions the conversation
+      improves, zero regressions — once block-reversal is fixed.</span></div>
+  </div>
+</section>
+
+<!-- ═══ 02 ═══ -->
+<section>
+  <h2><span class="n">02</span>Is the risk score smarter than a dumb rule?</h2>
+  <p class="lede">Six scorers, same cases, same operating point — the <strong>shipped</strong> 0.58,
+    not a tuned one, because tuning after the fact is how evaluations lie.</p>
+
+  <figure>
+    <p class="fig-t">Ranking quality, with 95% confidence intervals</p>
+    <p class="fig-s">ROC-AUC. 0.5 is chance — a coin flip.</p>
+    <svg viewBox="0 0 760 268" role="img" aria-label="Dot plot of ROC-AUC for six scorers with confidence intervals. HyperGuard 0.897, raw LLM 0.901, first-time payee 0.692, amount rule 0.581, population z-score 0.543, approve everything 0.500.">
+      <line class="gridline" x1="288" y1="18" x2="288" y2="238"/>
+      <text class="axl" x="288" y="256" text-anchor="middle">chance</text>
+      <g class="ax" text-anchor="middle">
+        <text x="240" y="256">0.45</text><text x="432" y="256">0.65</text>
+        <text x="624" y="256">0.85</text><text x="720" y="256">0.95</text>
+      </g>
+      <!-- rows -->
+      <g>
+        <text class="rowlbl" x="0" y="44">Approve everything</text>
+        <circle cx="288" cy="40" r="5.5" fill="var(--c-ref)"/>
+        <text class="lbl" x="304" y="44" fill="var(--faint)">0.500</text>
+        <rect class="hit" x="0" y="24" width="760" height="32"
+              data-tip="Approve everything · AUC 0.500 · the status quo"/>
+      </g>
+      <g>
+        <text class="rowlbl" x="0" y="80">Population z-score</text>
+        <line x1="288" y1="76" x2="374" y2="76" stroke="var(--c-1)" stroke-width="2" opacity=".45"/>
+        <circle cx="329" cy="76" r="5.5" fill="var(--c-1)"/>
+        <text class="lbl" x="390" y="80">0.543</text>
+        <rect class="hit" x="0" y="60" width="760" height="32"
+              data-tip="Population z-score · AUC 0.543 (0.50–0.59) · not personalised"/>
+      </g>
+      <g>
+        <text class="rowlbl" x="0" y="116">Amount &gt; SGD 5,000</text>
+        <line x1="317" y1="112" x2="413" y2="112" stroke="var(--c-1)" stroke-width="2" opacity=".45"/>
+        <circle cx="366" cy="112" r="5.5" fill="var(--c-1)"/>
+        <text class="lbl" x="429" y="116">0.581</text>
+        <rect class="hit" x="0" y="96" width="760" height="32"
+              data-tip="Amount rule · AUC 0.581 (0.53–0.63)"/>
+      </g>
+      <g>
+        <text class="rowlbl" x="0" y="152">First-time payee alone</text>
+        <line x1="432" y1="148" x2="509" y2="148" stroke="var(--c-1)" stroke-width="2" opacity=".45"/>
+        <circle cx="472" cy="148" r="5.5" fill="var(--c-1)"/>
+        <text class="lbl" x="525" y="152">0.692</text>
+        <rect class="hit" x="0" y="132" width="760" height="32"
+              data-tip="First-time payee only · AUC 0.692 (0.65–0.73) · one boolean"/>
+      </g>
+      <g>
+        <text class="rowlbl" x="0" y="188" fill="var(--ink)">HyperGuard Digital Twin</text>
+        <line x1="634" y1="184" x2="701" y2="184" stroke="var(--c-3)" stroke-width="2" opacity=".55"/>
+        <circle cx="669" cy="184" r="7" fill="var(--c-3)" stroke="var(--surface)" stroke-width="2"/>
+        <text class="lbl" x="712" y="188" fill="var(--c-3)">0.897</text>
+        <rect class="hit" x="0" y="168" width="760" height="32"
+              data-tip="HyperGuard · AUC 0.897 (0.86–0.93)"/>
+      </g>
+      <g>
+        <text class="rowlbl" x="0" y="224">Raw LLM, no features</text>
+        <line x1="643" y1="220" x2="701" y2="220" stroke="var(--c-1)" stroke-width="2" opacity=".45"/>
+        <circle cx="673" cy="220" r="5.5" fill="var(--c-1)" stroke="var(--surface)" stroke-width="2"/>
+        <text class="lbl" x="712" y="224">0.901</text>
+        <rect class="hit" x="0" y="204" width="760" height="32"
+              data-tip="Raw LLM · AUC 0.901 (0.87–0.93) · no feature engineering"/>
+      </g>
+    </svg>
+    <figcaption><b>Personalisation is vindicated</b> — 0.897 against 0.543 for the same anomaly
+      logic without a per-customer baseline. But note the top two intervals overlap almost
+      entirely: <b>a plain LLM ties the engine on ranking</b>, and beats it on precision
+      (70.3% vs 57.5%). The defence is determinism and auditability, not accuracy.</figcaption>
+  </figure>
+
+  <figure>
+    <p class="fig-t">The trade-off, and where we chose to sit</p>
+    <p class="fig-s">Every threshold from 0 to 1. Both series are percentages on one axis.</p>
+    <div class="legend">
+      <span><i style="background:var(--c-1)"></i>Scams caught</span>
+      <span><i style="background:var(--c-2)"></i>Legitimate transfers interrupted</span>
+    </div>
+    <svg viewBox="0 0 760 300" role="img" aria-label="Line chart. As the threshold rises from 0 to 1, scams caught falls from 100% to 0% and false positives fall from 100% to 0%. At the shipped 0.58 threshold, 97.8% of scams are caught but 52.2% of legitimate transfers are interrupted. At 0.70, 82.8% caught and 21.5% interrupted.">
+      <g class="gridline">
+        <line x1="64" y1="24" x2="730" y2="24"/><line x1="64" y1="84" x2="730" y2="84"/>
+        <line x1="64" y1="144" x2="730" y2="144"/><line x1="64" y1="204" x2="730" y2="204"/>
+        <line x1="64" y1="264" x2="730" y2="264"/>
+      </g>
+      <g class="ax" text-anchor="end">
+        <text x="54" y="28">100%</text><text x="54" y="88">75%</text>
+        <text x="54" y="148">50%</text><text x="54" y="208">25%</text><text x="54" y="268">0%</text>
+      </g>
+      <g class="ax" text-anchor="middle">
+        <text x="64" y="286">0.0</text><text x="197" y="286">0.2</text><text x="330" y="286">0.4</text>
+        <text x="464" y="286">0.6</text><text x="597" y="286">0.8</text><text x="730" y="286">1.0</text>
+      </g>
+      <text class="axl" x="397" y="300" text-anchor="middle">Risk threshold</text>
+
+      <!-- shipped / proposed markers -->
+      <line x1="450" y1="18" x2="450" y2="264" stroke="var(--brand)" stroke-width="1.5" opacity=".5"/>
+      <text class="axl" x="450" y="12" text-anchor="middle" fill="var(--brand)">shipped 0.58</text>
+      <line x1="530" y1="42" x2="530" y2="264" stroke="var(--c-ref)" stroke-width="1.5"/>
+      <text class="axl" x="536" y="38" fill="var(--faint)">0.70</text>
+
+      <polyline fill="none" stroke="var(--c-1)" stroke-width="2" stroke-linejoin="round"
+        points="64,24 131,24 197,24 264,24 330,24 397,29 464,35 530,65 597,90 663,132 730,264"/>
+      <polyline fill="none" stroke="var(--c-2)" stroke-width="2" stroke-linejoin="round"
+        points="64,24 131,89 197,100 264,121 330,123 397,136 464,170 530,212 597,236 663,256 730,264"/>
+
+      <circle cx="450" cy="31" r="5" fill="var(--c-1)" stroke="var(--surface)" stroke-width="2"/>
+      <circle cx="450" cy="139" r="5" fill="var(--c-2)" stroke="var(--surface)" stroke-width="2"/>
+      <circle cx="530" cy="65" r="5" fill="var(--c-1)" stroke="var(--surface)" stroke-width="2"/>
+      <circle cx="530" cy="212" r="5" fill="var(--c-2)" stroke="var(--surface)" stroke-width="2"/>
+      <text class="lbl" x="440" y="24" text-anchor="end" fill="var(--c-1)">97.8%</text>
+      <text class="lbl" x="440" y="152" text-anchor="end" fill="var(--c-2)">52.2%</text>
+      <text class="lbl" x="542" y="60" fill="var(--c-1)">82.8%</text>
+      <text class="lbl" x="542" y="216" fill="var(--c-2)">21.5%</text>
+
+      <rect class="hit" x="410" y="18" width="80" height="250" data-tip="Threshold 0.58 (shipped) · 97.8% caught · 52.2% interrupted"/>
+      <rect class="hit" x="500" y="18" width="60" height="250" data-tip="Threshold 0.70 · 82.8% caught · 21.5% interrupted"/>
+    </svg>
+    <figcaption>The two curves fall at very different rates between 0.58 and 0.70 — that gap is
+      free money. <b>Moving the threshold to 0.70 cuts interruptions from 52% to 21.5% while
+      still catching 83% of scams.</b> One constant, not a rewrite.</figcaption>
+  </figure>
+
+  <div class="call danger">
+    <span class="t">The deployment blocker</span>
+    <p>The restraint story is half true. HyperGuard <strong>never</strong> bothers the grocery
+      run — 0 of 65 ordinary transfers flagged. But <strong>80.2%</strong> of legitimate large
+      transfers to a new payee get intercepted. An 81-year-old paying a renovation contractor
+      gets the same phone call as a scam victim.</p>
+  </div>
+
+  <figure>
+    <p class="fig-t">What each signal is actually worth</p>
+    <p class="fig-s">ROC-AUC lost when the signal is removed. The weights were assigned by hand;
+      this measures them.</p>
+    <svg viewBox="0 0 760 316" role="img" aria-label="Diverging bar chart of signal contribution. new_payee and unknown_number each +0.055, overseas_number +0.041, velocity_spike +0.023, pressure_language +0.012, elevated_vulnerability +0.007, amount_anomaly 0.000, off_hours negative 0.006.">
+      <line class="gridline" x1="330" y1="18" x2="330" y2="284"/>
+      <text class="axl" x="330" y="302" text-anchor="middle">no effect</text>
+      <g font-family="var(--mono)">
+        <g><text class="rowlbl" x="0" y="38">new_payee</text>
+           <rect x="330" y="26" width="363" height="14" rx="4" fill="var(--c-1)"/>
+           <text class="lbl" x="703" y="38">+0.055</text>
+           <rect class="hit" x="0" y="22" width="760" height="24" data-tip="new_payee · +0.055 AUC · fired in 117 cases"/></g>
+        <g><text class="rowlbl" x="0" y="70">unknown_number</text>
+           <rect x="330" y="58" width="363" height="14" rx="4" fill="var(--c-1)"/>
+           <text class="lbl" x="703" y="70">+0.055</text>
+           <rect class="hit" x="0" y="54" width="760" height="24" data-tip="unknown_number · +0.055 AUC · fired in 115 cases"/></g>
+        <g><text class="rowlbl" x="0" y="102">overseas_number</text>
+           <rect x="330" y="90" width="271" height="14" rx="4" fill="var(--c-1)"/>
+           <text class="lbl" x="611" y="102">+0.041</text>
+           <rect class="hit" x="0" y="86" width="760" height="24" data-tip="overseas_number · +0.041 AUC · fired in 41 cases"/></g>
+        <g><text class="rowlbl" x="0" y="134">velocity_spike</text>
+           <rect x="330" y="122" width="152" height="14" rx="4" fill="var(--c-1)"/>
+           <text class="lbl" x="492" y="134">+0.023</text>
+           <rect class="hit" x="0" y="118" width="760" height="24" data-tip="velocity_spike · +0.023 AUC · fired in 48 cases"/></g>
+        <g><text class="rowlbl" x="0" y="166">pressure_language</text>
+           <rect x="330" y="154" width="79" height="14" rx="4" fill="var(--c-1)"/>
+           <text class="lbl" x="419" y="166">+0.012</text>
+           <rect class="hit" x="0" y="150" width="760" height="24" data-tip="pressure_language · +0.012 AUC · fired in 34 cases"/></g>
+        <g><text class="rowlbl" x="0" y="198">elevated_vulnerability</text>
+           <rect x="330" y="186" width="46" height="14" rx="4" fill="var(--c-1)"/>
+           <text class="lbl" x="386" y="198">+0.007</text>
+           <rect class="hit" x="0" y="182" width="760" height="24" data-tip="elevated_vulnerability · +0.007 AUC · fired in 121 cases"/></g>
+        <g><text class="rowlbl" x="0" y="230" fill="var(--c-2)">amount_anomaly</text>
+           <rect x="328" y="218" width="4" height="14" rx="2" fill="var(--c-2)"/>
+           <text class="lbl" x="344" y="230" fill="var(--c-2)">0.000 · fires in 255 of 320</text>
+           <rect class="hit" x="0" y="214" width="760" height="24" data-tip="amount_anomaly · contributes nothing · fires in 255 of 320 cases"/></g>
+        <g><text class="rowlbl" x="0" y="262" fill="var(--c-2)">off_hours</text>
+           <rect x="290" y="250" width="40" height="14" rx="4" fill="var(--c-2)"/>
+           <text class="lbl" x="278" y="262" text-anchor="end" fill="var(--c-2)">−0.006</text>
+           <rect class="hit" x="0" y="246" width="760" height="24" data-tip="off_hours · −0.006 AUC · the model scores better without it"/></g>
+      </g>
+    </svg>
+    <figcaption><b>Two of the eight signals are not earning their place.</b>
+      <code>amount_anomaly</code> fires in 255 of 320 cases and contributes nothing;
+      <code>off_hours</code> is actively negative. Deleting both would make the model
+      slightly better and every rationale shorter and more honest.</figcaption>
+  </figure>
+
+  <figure>
+    <p class="fig-t">The score is a good ranking and a bad probability</p>
+    <p class="fig-s">Claimed confidence against how often those cases were actually scams.</p>
+    <svg viewBox="0 0 460 380" role="img" aria-label="Calibration plot. Observed scam rate falls well below the claimed score across the range: a claimed 0.59 is a scam only 10 percent of the time, a claimed 0.66 only 34 percent. Expected calibration error 0.212.">
+      <g class="gridline">
+        <line x1="60" y1="30" x2="60" y2="320"/><line x1="60" y1="320" x2="390" y2="320"/>
+      </g>
+      <line x1="60" y1="320" x2="390" y2="30" stroke="var(--c-ref)" stroke-width="2"
+            stroke-dasharray="5 5"/>
+      <text class="axl" x="330" y="80" fill="var(--faint)">perfectly calibrated</text>
+      <g class="ax" text-anchor="end">
+        <text x="50" y="324">0.0</text><text x="50" y="179">0.5</text><text x="50" y="34">1.0</text>
+      </g>
+      <g class="ax" text-anchor="middle">
+        <text x="60" y="340">0.0</text><text x="225" y="340">0.5</text><text x="390" y="340">1.0</text>
+      </g>
+      <text class="axl" x="225" y="360" text-anchor="middle">Score the model claimed</text>
+      <text class="axl" x="-175" y="16" transform="rotate(-90)" text-anchor="middle">Actually scams</text>
+      <polyline fill="none" stroke="var(--c-1)" stroke-width="2" stroke-linejoin="round"
+        points="83,320 110,320 146,320 185,320 199,253 255,291 278,221 321,192 337,149 383,50"/>
+      <g fill="var(--c-1)" stroke="var(--surface)" stroke-width="2">
+        <circle cx="83" cy="320" r="4.5"/><circle cx="110" cy="320" r="4.5"/>
+        <circle cx="146" cy="320" r="4.5"/><circle cx="185" cy="320" r="4.5"/>
+        <circle cx="199" cy="253" r="4.5"/><circle cx="255" cy="291" r="4.5"/>
+        <circle cx="278" cy="221" r="4.5"/><circle cx="321" cy="192" r="4.5"/>
+        <circle cx="337" cy="149" r="4.5"/><circle cx="383" cy="50" r="4.5"/>
+      </g>
+      <circle cx="255" cy="291" r="8" fill="none" stroke="var(--c-2)" stroke-width="2"/>
+      <text class="lbl" x="248" y="309" text-anchor="end" fill="var(--c-2)">claims 0.59, is 0.10</text>
+      <rect class="hit" x="235" y="271" width="40" height="40" data-tip="Claimed 0.59 · actually scams 10% · n=29"/>
+      <rect class="hit" x="258" y="201" width="40" height="40" data-tip="Claimed 0.66 · actually scams 34% · n=50"/>
+      <rect class="hit" x="363" y="30" width="40" height="40" data-tip="Claimed 0.98 · actually scams 93% · n=80"/>
+    </svg>
+    <figcaption>Every point sits below the diagonal — the model is <b>systematically
+      overconfident</b>, error 0.212. It ranks cases well, so the ordering is trustworthy, but
+      the number should never be shown to an operator as a percentage, and the
+      <code>confidence &gt;= 0.6</code> routing gate is tuned against a scale that does not mean
+      what it says.</figcaption>
+  </figure>
+</section>
+
+<!-- ═══ 03 ═══ -->
+<section>
+  <h2><span class="n">03</span>Does the classifier survive rewording?</h2>
+  <p class="lede">The Educator matches literal substrings. This asks what happens when the same
+    scam is described as <em>"an account where it'll be protected"</em> rather than "safe account".</p>
+
+  <figure>
+    <p class="fig-t">Precision, clean scams → reworded scams</p>
+    <p class="fig-s">How often a scam call names the <em>right</em> scam.</p>
+    <div class="legend">
+      <span><i style="background:var(--c-2)"></i>Keyword matcher (shipped)</span>
+      <span><i style="background:var(--c-1)"></i>LLM classifier</span>
+    </div>
+    <svg viewBox="0 0 520 300" role="img" aria-label="Slope chart. The keyword matcher's precision falls from 63.3 percent on clean scams to 40.7 percent on reworded scams. The LLM classifier stays at 100 percent on both.">
+      <g class="gridline"><line x1="150" y1="30" x2="150" y2="272"/><line x1="370" y1="30" x2="370" y2="272"/></g>
+      <g class="axl" text-anchor="middle">
+        <text x="150" y="292">clean</text><text x="370" y="292">reworded</text>
+      </g>
+      <line x1="150" y1="40" x2="370" y2="40" stroke="var(--c-1)" stroke-width="2"/>
+      <line x1="150" y1="124" x2="370" y2="176" stroke="var(--c-2)" stroke-width="2"/>
+      <g stroke="var(--surface)" stroke-width="2">
+        <circle cx="150" cy="40" r="5.5" fill="var(--c-1)"/><circle cx="370" cy="40" r="5.5" fill="var(--c-1)"/>
+        <circle cx="150" cy="124" r="5.5" fill="var(--c-2)"/><circle cx="370" cy="176" r="5.5" fill="var(--c-2)"/>
+      </g>
+      <text class="lbl" x="384" y="44" fill="var(--c-1)">100%</text>
+      <text class="lbl" x="136" y="128" text-anchor="end" fill="var(--c-2)">63.3%</text>
+      <text class="lbl" x="384" y="180" fill="var(--c-2)">40.7%</text>
+      <rect class="hit" x="120" y="100" width="60" height="48" data-tip="Keyword · clean · precision 63.3%"/>
+      <rect class="hit" x="340" y="152" width="60" height="48" data-tip="Keyword · reworded · precision 40.7%"/>
+      <rect class="hit" x="340" y="18" width="60" height="44" data-tip="LLM · reworded · precision 100% (see caveat)"/>
+    </svg>
+    <figcaption>The prediction was that rewording would make the matcher <b>miss</b> scams. It
+      didn't — recall held at ~92%. <b>Precision collapsed instead.</b> It keeps firing
+      confidently, increasingly on the wrong archetype, so the victim gets read the counter-script
+      for a different scam entirely.</figcaption>
+  </figure>
+
+  <div class="call danger">
+    <span class="t">The quieter number is worse</span>
+    <p>The matcher correctly says "no scam" for only <strong>72.6% of legitimate customers</strong>.
+      It is calling roughly <strong>one in four innocent people</strong> a scam victim, on the
+      phone, by name.</p>
+  </div>
+  <div class="call caution">
+    <span class="t">Do not quote the LLM's 100%</span>
+    <p>The same model that generated the test utterances also classified them — it is grading its
+      own handwriting. The <em>comparison</em> stands, since the keyword matcher had no such
+      advantage, but the absolute figure will not survive real transcripts. Regenerating with a
+      different model family is the fix.</p>
+  </div>
+</section>
+
+<!-- ═══ 04 ═══ -->
+<section>
+  <h2><span class="n">04</span>Does the phone call change any decisions?</h2>
+  <p class="lede">The thesis test. If the conversation flips nothing, five agents are an expensive
+    risk score. Reported as expected cost, because a missed scam and a false block are not equally
+    bad and an accuracy number pretends they are.</p>
+
+  <div class="stats">
+    <div class="stat bad"><span class="v">SGD 3,159</span><span class="l">cost per case of doing
+      nothing — the status quo for authorised payments</span></div>
+    <div class="stat good"><span class="v">91</span><span class="l">decisions changed by the
+      conversation, of 320</span></div>
+    <div class="stat good"><span class="v">0</span><span class="l">of those were regressions</span></div>
+    <div class="stat cool"><span class="v">−94%</span><span class="l">false blocks, 97 down to 6</span></div>
+  </div>
+
+  <figure>
+    <p class="fig-t">Expected cost per case</p>
+    <p class="fig-s">A missed scam costs the transfer; a false block costs SGD 64 in handling and
+      churn risk. Doing nothing (SGD 3,159) is off this scale — see the tile above.</p>
+    <svg viewBox="0 0 760 210" role="img" aria-label="Bar chart of expected cost per case. Amount rule with no call: SGD 681. Risk score only: SGD 64. Full swarm with the call: SGD 46.">
+      <line class="gridline" x1="270" y1="14" x2="270" y2="176"/>
+      <g>
+        <text class="rowlbl" x="0" y="40">Block over SGD 5,000</text>
+        <text class="rowlbl" x="0" y="56" font-size="11" fill="var(--faint)">no call</text>
+        <rect x="270" y="24" width="450" height="30" rx="4" fill="var(--c-2)"/>
+        <text class="lbl" x="706" y="44" text-anchor="end" fill="#1a0409">SGD 681</text>
+        <rect class="hit" x="0" y="18" width="760" height="42" data-tip="Amount rule, no call · SGD 681/case · 72 scams missed"/>
+      </g>
+      <g>
+        <text class="rowlbl" x="0" y="98">Risk score only</text>
+        <text class="rowlbl" x="0" y="114" font-size="11" fill="var(--faint)">today's live path</text>
+        <rect x="270" y="82" width="42" height="30" rx="4" fill="var(--c-1)"/>
+        <text class="lbl" x="324" y="102">SGD 64</text>
+        <rect class="hit" x="0" y="76" width="760" height="42" data-tip="Risk score only · SGD 64/case · 97 false blocks"/>
+      </g>
+      <g>
+        <text class="rowlbl" x="0" y="156" fill="var(--ink)">Full swarm with the call</text>
+        <rect x="270" y="140" width="30" height="30" rx="4" fill="var(--c-3)"/>
+        <text class="lbl" x="312" y="160" fill="var(--c-3)">SGD 46</text>
+        <rect class="hit" x="0" y="134" width="760" height="42" data-tip="Full swarm · SGD 46/case · only 6 false blocks"/>
+      </g>
+      <g class="ax" text-anchor="middle">
+        <text x="270" y="196">0</text><text x="468" y="196">300</text><text x="720" y="196">681</text>
+      </g>
+    </svg>
+    <figcaption>Every one of the 91 changed decisions is a <b>legitimate transfer released</b> — a
+      customer who explained themselves and was believed. The call is what turns an 80%
+      false-positive rate into something a bank could actually run.</figcaption>
+  </figure>
+
+  <div class="call danger">
+    <span class="t">Except it cannot do this today</span>
+    <p>The Arbiter has <strong>no path to release a transfer the score already condemned</strong>.
+      On the live telephony path the Educator is skipped entirely, so the deployed system behaves
+      like the <em>risk-score-only</em> bar — SGD 64, 97 false blocks.</p>
+    <p>Read the bottom bar as <strong>the value of a fix, not a description of the
+      deployment</strong>. One bug, 91 customers.</p>
+  </div>
+</section>
+
+<!-- ═══ 05 ═══ -->
+<section>
+  <h2><span class="n">05</span>Are the explanations right, or just present?</h2>
+  <p class="lede">Ground truth for which signals <em>should</em> fire is recorded per case,
+    independently of what the engine does.</p>
+  <div class="stats">
+    <div class="stat good"><span class="v">100%</span><span class="l">of top-cited signals name a
+      true cause — the one the customer hears</span></div>
+    <div class="stat good"><span class="v">89.1%</span><span class="l">exact signal-set match
+      <span class="dim">(85.2–92.0)</span></span></div>
+    <div class="stat good"><span class="v">0</span><span class="l">of 802 signals had an empty
+      reason string</span></div>
+    <div class="stat warn"><span class="v">49.3%</span><span class="l"><code>pressure_language</code>
+      recall — misses half the coercive memos</span></div>
+  </div>
+  <div class="call">
+    <span class="t">This one is genuinely strong</span>
+    <p>Seven of eight signals fire with <strong>100% precision and 100% recall</strong>. The engine
+      is not merely producing explanations — it is producing correct ones, and the loudest signal
+      on the card is always a real driver. This is the pitch claim that most survives inspection.</p>
+  </div>
+</section>
+
+<!-- ═══ 06 ═══ -->
+<section>
+  <h2><span class="n">06</span>What these numbers are not</h2>
+  <p class="lede">Stated before anyone asks, because the limits are as informative as the results.</p>
+  <div class="call caution">
+    <span class="t">The dataset is synthetic</span>
+    <p>Transfer features come from distributions written by hand; utterances are LLM-generated from
+      plain-language scam briefs. These results describe how the system behaves <strong>on the
+      world the generator imagines</strong>. If those assumptions are wrong, every number here is
+      wrong in the same direction and confidently so.</p>
+    <p>What fixes it: sourced cases from SPF scam briefs and ScamShield advisories, labelled by two
+      annotators with inter-rater agreement reported.</p>
+  </div>
+  <div class="call">
+    <span class="t">But it did escape the circularity, and that is measured</span>
+    <p>The shipped fixtures were unusable for evaluation — the victim scripts and the classifier's
+      keyword lists live in the same file, so the test data was written from the answer key. The
+      replacement never sees those lists. Similarity to the old fixtures is <strong>0.12</strong>.
+      The circularity is quantified rather than assumed.</p>
+  </div>
+  <div class="call caution">
+    <span class="t">Four questions no dataset here can answer</span>
+    <p>Whether real scams resemble these six archetypes. Whether it works in Mandarin, Hokkien,
+      Malay or Tamil — the languages the target users would actually panic in. Whether it survives
+      the scammer <em>still being on the other line</em>, coaching the victim through the call. And
+      whether a frightened 72-year-old mid-manipulation actually listens — that needs people, not
+      test cases.</p>
+  </div>
+</section>
+
+<!-- ═══ 07 ═══ -->
+<section>
+  <h2><span class="n">07</span>Bugs this found</h2>
+  <p class="lede">Building the harness surfaced four defects no test was covering. Two are fixed.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Defect</th><th>Effect</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Fast model id <code>gpt-5.5-mini</code> does not exist</td>
+          <td>Every routine LLM call 404'd and fell back to scripted lines while health still
+              reported <code>llm: true</code></td><td class="win">Fixed</td></tr>
+      <tr><td>Cost saving not measurable</td>
+          <td>Tiering claim had no number behind it without a price table</td>
+          <td class="win">Fixed</td></tr>
+      <tr><td>Usage ledger crosstalk under concurrency</td>
+          <td>Case A's model calls billed to case B — breaks the moment two customers are on calls
+              at once</td><td class="lose">Open</td></tr>
+      <tr><td>No block-reversal path</td>
+          <td>A cleared customer stays blocked forever; costs 91 of 320 decisions</td>
+          <td class="lose">Open</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="call">
+    <span class="t">Regression cover</span>
+    <p><strong>1,011 tests pass.</strong> 914 are property tests asserting invariants over generated
+      inputs — score bounds, determinism, monotonicity, every signal carrying a readable reason.
+      Three are deliberately failing tests pinning the open bugs above, so fixing one forces the fix
+      to be locked in rather than quietly forgotten.</p>
+  </div>
+</section>
+
+<!-- ═══ 08 ═══ -->
+<section>
+  <h2><span class="n">08</span>What we would do next</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>#</th><th>Action</th><th>Because</th><th>Effort</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>Let a cleared assessment release a blocked transfer</td>
+          <td>Worth 91 of 320 decisions; unblocks the whole thesis</td><td>½ day</td></tr>
+      <tr><td class="num">2</td><td>Move the threshold to 0.70</td>
+          <td>Interruptions 52% → 21.5%, catch rate still 83%</td><td>1 line</td></tr>
+      <tr><td class="num">3</td><td>LLM classification with the matcher as a strictness floor</td>
+          <td>Precision holds under rewording; keeps the deterministic safety net</td><td>1 day</td></tr>
+      <tr><td class="num">4</td><td>Delete <code>amount_anomaly</code> and <code>off_hours</code></td>
+          <td>Measured contribution of zero and −0.006</td><td>1 hour</td></tr>
+      <tr><td class="num">5</td><td>Source a real labelled dataset</td>
+          <td>Turns all of the above from internal consistency into evidence</td><td>2–4 days</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <details>
+    <summary>Chart method — palette validation</summary>
+    <p style="color:var(--muted);font-size:.86rem">Data marks use steps snapped into the dark-mode
+      lightness band (OKLCH L 0.48–0.67) and checked with the colour validator: teal↔red ΔE 16.0
+      and teal↔olive ΔE 18.3 under deuteranopia, both above the ΔE 8 floor. The brand's bright lime
+      and its red <em>fail</em> that check together (ΔE 3.9), so despite the obvious good/bad
+      semantics those two never share a chart — the bright lime is kept for headings and chrome
+      only. Every charted value also appears in a table or tile, so nothing is encoded by colour
+      alone.</p>
+  </details>
+</section>
+
+<footer>
+  Generated from <code>python -m eval.run --all</code> over 320 cases ·
+  Detail in <code>backend/eval/results/REPORT.md</code> ·
+  Method in <code>EVALUATION.md</code> · Audit in <code>FUNCTIONALITY.md</code><br />
+  Synthetic dataset — see section 06 before quoting any figure externally.
+</footer>
+
+</div>
+<script>
+  const tip = document.getElementById('tip');
+  for (const el of document.querySelectorAll('[data-tip]')) {
+    const show = e => {
+      tip.textContent = el.dataset.tip;
+      tip.style.opacity = 1;
+      const r = tip.getBoundingClientRect();
+      let x = e.clientX + 14, y = e.clientY - r.height - 12;
+      if (x + r.width > innerWidth - 8) x = e.clientX - r.width - 14;
+      if (y < 8) y = e.clientY + 18;
+      tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    };
+    el.addEventListener('mousemove', show);
+    el.addEventListener('mouseenter', show);
+    el.addEventListener('mouseleave', () => tip.style.opacity = 0);
+  }
+</script>
+</body>
+</html>

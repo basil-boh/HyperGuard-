@@ -86,10 +86,15 @@ export function InterceptionFeed() {
       <div className="bracketed overflow-hidden rounded-xl border border-hairline bg-abyss/60 shadow-panel backdrop-blur-sm">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-hairline px-6 py-3.5">
-          <span className="readout text-faint">Live interceptions</span>
+          <span className="flex items-baseline gap-2.5">
+            <span className="readout text-faint">Interceptions</span>
+            <span className="rounded border border-hairline px-1.5 py-0.5 text-[0.62rem] uppercase tracking-[0.16em] text-faint">
+              Illustrative
+            </span>
+          </span>
           <span className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 animate-breathe rounded-full bg-crimson" />
-            <span className="readout text-crimson">Rec</span>
+            <span className="readout text-crimson">Demo</span>
           </span>
         </div>
 
@@ -120,12 +125,18 @@ export function InterceptionFeed() {
 
         {/* Footer counter */}
         <div className="flex items-center justify-between border-t border-hairline px-6 py-3.5">
-          <span className="readout text-faint">Intercepted today</span>
+          <span className="readout text-faint">Sample volume</span>
           <span className="numeric text-base font-semibold tabular-nums text-signal">
             {count.toLocaleString("en-SG")}
           </span>
         </div>
       </div>
+
+      {/* This panel is a simulation of what the swarm does, not a feed of real cases.
+          Said plainly here so nobody has to infer it from the animation. */}
+      <p className="mt-3 text-center text-[0.78rem] text-faint">
+        Illustrative simulation of the interception pattern — not live customer data.
+      </p>
     </section>
   );
 }

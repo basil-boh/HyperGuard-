@@ -293,7 +293,8 @@ def _transaction(
 
 
 async def _utterances(
-    llm: LLMClient, rng: random.Random, archetype: ScamArchetype, adversarial: bool, legit_brief: str | None
+    llm: LLMClient, rng: random.Random, archetype: ScamArchetype, adversarial: bool,
+    legit_brief: str | None, stats: dict,
 ) -> list[str]:
     if legit_brief is not None:
         brief = (
@@ -306,13 +307,19 @@ async def _utterances(
         fallback = list(_TEMPLATE_FALLBACK[archetype])
 
     if not llm.enabled:
+        stats["template"] += 1
         return fallback
 
     system = _UTTERANCE_SYSTEM + (_ADVERSARIAL_NOTE if adversarial else "")
-    out = await llm.complete_json(system, f"Situation: {brief}", temperature=1.0)
+    # Deliberately the deep tier: the default "fast" tier resolves to a model id that
+    # 404s, and a silent fallback here would quietly turn the dataset back into the
+    # fixtures we are trying to escape.
+    out = await llm.complete_json(system, f"Situation: {brief}", temperature=1.0, tier="deep")
     lines = (out or {}).get("lines")
     if isinstance(lines, list) and lines:
+        stats["llm"] += 1
         return [str(x).strip() for x in lines if str(x).strip()][:4]
+    stats["template"] += 1
     return fallback
 
 
@@ -339,6 +346,7 @@ async def build(n: int, seed: int, use_llm: bool) -> Dataset:
     rng.shuffle(plan)
 
     sem = asyncio.Semaphore(8)
+    stats = {"llm": 0, "template": 0}
 
     async def one(idx: int, slice_: Slice, arch: ScamArchetype | None) -> EvalCase:
         is_scam = arch is not None
@@ -358,7 +366,7 @@ async def build(n: int, seed: int, use_llm: bool) -> Dataset:
             lines = await _utterances(
                 llm, rng, arch or ScamArchetype.none,
                 adversarial=slice_ is Slice.scam_adversarial,
-                legit_brief=legit_brief,
+                legit_brief=legit_brief, stats=stats,
             )
 
         return EvalCase(
@@ -375,10 +383,21 @@ async def build(n: int, seed: int, use_llm: bool) -> Dataset:
 
     cases = await asyncio.gather(*(one(i, s, a) for i, (s, a) in enumerate(plan)))
 
+    # Report what actually happened, not what was configured. An LLM call that 404s and
+    # falls back to the fixture templates would otherwise be recorded as "llm" and quietly
+    # restore the circularity this whole module exists to break.
+    total = stats["llm"] + stats["template"]
+    generator = (
+        "llm" if stats["template"] == 0 and stats["llm"]
+        else "template" if stats["llm"] == 0
+        else f"mixed ({stats['llm']}/{total} llm)"
+    )
+    print(f"  utterances: {stats['llm']} llm, {stats['template']} template")
+
     return Dataset(
         version="1.0",
         generated_at=utc(),
-        generator="llm" if live else "template",
+        generator=generator,
         notes=(
             "Synthetic. Transfer features are drawn from the seeded distributions in "
             "eval/generate.py; utterances are LLM-generated from plain-language scam briefs "

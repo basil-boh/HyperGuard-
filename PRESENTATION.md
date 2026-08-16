@@ -54,10 +54,12 @@ cd mobile && npx expo start         # open in Expo Go on your phone
 > themselves. The whole scam lives in a sixty-second window — between *'I'll send
 > it'* and *'sent.'* No human fraud team can be in that moment for every customer."
 
-**[Keep scrolling — the live interceptions feed is streaming, counter ticking up.]**
+**[Keep scrolling — the interceptions panel is animating. It is labelled *Illustrative*
+on screen; say so, don't imply it's live traffic.]**
 
-> "So we built a layer that can. This is the swarm working in real time — every row
-> is a scam caught mid-payment and blocked."
+> "So we built a layer that can. This panel is illustrative — it's the shape of what
+> the swarm does at scale: every row a payment interrupted mid-scam, not after. In a
+> minute I'll show you the real thing running on my phone."
 
 **[Scroll to the before/after "gap" panel — the dead grey card vs the glowing live card.]**
 
@@ -158,10 +160,15 @@ cd mobile && npx expo start         # open in Expo Go on your phone
   payment — voice negotiation, live scam education, family escalation, and recovery."
 - **"Won't it annoy legitimate users?"** — "It only engages on genuine anomalies vs
   the customer's own baseline — low-risk transfers clear instantly on the fast path.
-  You saw the feed: most activity never triggers an intervention."
+  Daniel moves four figures routinely and never gets called; the same amount from
+  Wong, who has a thin file, is critical. That contrast is in the seeded accounts, and
+  I can show it live. What I can't yet give you is a measured false-positive rate —
+  that needs a labelled evaluation set, and it's the next thing we build."
 - **"How does the risk model work?"** — "A behavioural Digital Twin per customer:
-  z-scores on amount/time/velocity plus rules like new-payee and overseas, with an
-  LLM explainer that turns the signals into human-readable reasons."
+  z-scores on amount/time/velocity plus rules like new-payee, unknown number and
+  overseas, combined through a logistic link. The weights are legible constants and
+  every signal carries its own written reason — deliberately not a black box, because
+  the explanation has to hold up on the phone and in an audit six months later."
 - **"What's the business model / who buys it?"** — "It's a drop-in layer banks and
   wallets add between intent and settlement — no rip-and-replace of their stack."
 
@@ -173,8 +180,9 @@ cd mobile && npx expo start         # open in Expo Go on your phone
 2. **Phone/Expo flaky?** Skip the phone — trigger the same scenario from the console's
    scenario launcher (`/console/live` → pick *police impersonation* → run). Same swarm,
    same verdict.
-3. **Everything's down?** Narrate over the landing page's **live interceptions feed**
-   and the **"Sixty seconds"** timeline — they tell the whole story on their own.
+3. **Everything's down?** Narrate over the landing page's **interceptions panel** (say
+   "illustrative" — it's labelled that on screen) and the **"Sixty seconds"** timeline.
+   They carry the story without you claiming anything the system isn't doing right then.
 4. Keep a **screen recording** of one clean run on your desktop as the ultimate backup.
 
 ---

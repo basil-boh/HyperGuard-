@@ -46,6 +46,24 @@ reported. That is the upgrade that turns these from internal-consistency checks 
 evidence. Until then, do not put these numbers on a slide without the word "synthetic"
 next to them.
 
+### Three specific things you must not over-read
+
+**1. The LLM classifier's perfect score is contaminated.** The same model that generated
+the utterances also classifies them in Option B. It is grading its own handwriting, and a
+1.000 macro-F1 is the signature of that, not of a solved problem. The keyword matcher has no
+such advantage, so the *comparison* still means something — but treat the LLM's absolute
+numbers as an upper bound that will not survive contact with real transcripts. **Fix:**
+regenerate with a different model family than the one under test.
+
+**2. Option C's E3 models the graph path where the Educator runs.** That is the path you get
+*without* telephony credentials. On the live telephony path the graph skips the Educator
+entirely (`graph.py:97-101`), verification is never set to `verified`, and the system
+therefore behaves like **E2**, not E3. So the E2→E3 gap is best read as *the value of fixing
+the live path*, not as a description of what the deployment does today.
+
+**3. A false-positive rate this high is the headline, not a footnote.** See Option A's
+per-slice table before quoting any catch rate.
+
 """
 
 
