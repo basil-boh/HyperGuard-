@@ -4,8 +4,8 @@
 
 ### The intervention layer for authorised payment fraud
 
-**A scammer doesn't break into the bank. They talk your mother into wiring the money herself.
-HyperGuard is the AI swarm that picks up the phone in the sixty seconds before she sends it.**
+**They stopped attacking the bank when they realised the customer was easier.
+HyperGuard is the AI swarm that picks up the phone in the sixty seconds before the money leaves.**
 
 [![LangGraph orchestrates it](https://img.shields.io/badge/LangGraph-orchestrates_it-1C3C3C?style=for-the-badge&labelColor=1C3C3C)](https://langchain-ai.github.io/langgraph/)
 [![Twilio calls](https://img.shields.io/badge/Twilio-calls_them-F22F46?style=for-the-badge&labelColor=F22F46)](https://www.twilio.com)
